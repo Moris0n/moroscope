@@ -1,0 +1,8 @@
+{
+  "name": "Moroscope",
+  "description": "Multi-source horoscope aggregator, timezone-normalized transit synthesizer, and interactive weekly energy level map PWA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
