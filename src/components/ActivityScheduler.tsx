@@ -157,6 +157,8 @@ export const ActivityScheduler: React.FC<ActivitySchedulerProps> = ({
           <div className="text-xs text-slate-400">
             <span>Timezone-Normalized Daily Activity Correlator</span>
             <span className="mx-2" aria-hidden="true">·</span>
+            <span className="text-slate-500 italic">Local demo — not generated forecast</span>
+            <span className="mx-2" aria-hidden="true">·</span>
             <span>Prioritized by {forecast.chartRulerUsed.sign} {forecast.chartRulerUsed.mode}</span>
           </div>
           <h2 className="text-lg sm:text-xl font-semibold text-slate-100 mt-1">
@@ -171,7 +173,7 @@ export const ActivityScheduler: React.FC<ActivitySchedulerProps> = ({
             className="min-h-[40px] px-3.5 py-2 rounded-xl bg-violet-500/20 hover:bg-violet-500/30 border border-violet-400/30 text-violet-200 text-xs font-medium flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50"
           >
             <Sparkles className="w-3.5 h-3.5 text-violet-300 shrink-0" />
-            <span>{isSynthesizing ? 'Synthesizing Feeds...' : 'Refresh Multi-Source Synthesis'}</span>
+            <span>{isSynthesizing ? 'Generating Forecast...' : 'Generate Monthly Forecast'}</span>
           </button>
 
           <button

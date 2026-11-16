@@ -3,22 +3,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   Calendar,
-  Compass,
+  Clipboard,
+  Download,
   Globe,
-  Layers,
   Radio,
   Sparkles,
-  Sun,
   UserCheck,
 } from 'lucide-react';
 import {
-  ActivityCategory,
   DailyEnergyForecast,
+  ForecastResult,
   HoroscopeSource,
+  LifePriority,
   ScheduledActivity,
   UserProfile,
 } from './types/astrology';
@@ -34,10 +34,24 @@ import {
 } from './utils/astrologyEngine';
 import {
   TIMEZONE_OPTIONS,
-  convertSourceWindowToUserTimezone,
   detectLocalTimezone,
   formatTimezoneBadge,
 } from './utils/timezoneEngine';
+import {
+  DEFAULT_BACKEND_URL,
+  DEFAULT_TARGET_MONTH,
+  PRIORITY_LABELS,
+  isValidBackendUrl,
+  isValidForecastShape,
+  mergeProfileWithDefaults,
+} from './utils/forecastShared';
+import {
+  copyToClipboard,
+  downloadIcs,
+  impactBadgeClasses,
+  readForecastSseStream,
+} from './utils/forecastHelpers';
+import { AgentProgress } from './components/AgentProgress';
 import { EnergyWaveChart } from './components/EnergyWaveChart';
 import { TransitHeatmapMatrix } from './components/TransitHeatmapMatrix';
 import { ActivityScheduler } from './components/ActivityScheduler';
@@ -50,10 +64,13 @@ type ActiveTab = 'dashboard' | 'energymap' | 'sources' | 'profile';
 
 const STORAGE_KEYS = {
   PROFILE: 'celestialpulse_profile_v1',
+  PROFILE_ID: 'celestialpulse_profile_id_v1',
   SOURCES: 'celestialpulse_sources_v1',
   CUSTOM_ACTIVITIES: 'celestialpulse_custom_acts_v1',
   COMPLETED_IDS: 'celestialpulse_completed_v1',
 };
+
+const FORECAST_STEPS_TOTAL = 4;
 
 const INITIAL_PROFILE: UserProfile = {
   name: 'Elena Vance',
@@ -77,7 +94,19 @@ const INITIAL_PROFILE: UserProfile = {
     'mind',
     'rest',
   ],
+  targetMonth: DEFAULT_TARGET_MONTH,
+  priorities: ['careerTransition', 'financialPlanning'],
+  backendUrl: DEFAULT_BACKEND_URL,
 };
+
+interface StoredForecast {
+  result: ForecastResult;
+  rawJson: string;
+  generatedAt: string;
+  targetMonth: string;
+  priorities: LifePriority[];
+  profileId: string | null;
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -86,11 +115,21 @@ export default function App() {
   const [profile, setProfile] = useState<UserProfile>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.PROFILE);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        return mergeProfileWithDefaults(INITIAL_PROFILE, JSON.parse(saved));
+      }
     } catch {
       // ignore storage error
     }
     return INITIAL_PROFILE;
+  });
+
+  const [profileId, setProfileId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.PROFILE_ID);
+    } catch {
+      return null;
+    }
   });
 
   const [sources, setSources] = useState<HoroscopeSource[]>(() => {
@@ -125,20 +164,16 @@ export default function App() {
     return [];
   });
 
-  const [aiSynthesisOverride, setAiSynthesisOverride] = useState<
-    Record<
-      string,
-      {
-        executiveSummary: string;
-        dominantTransit: string;
-        consensusScore: number;
-        timezoneAdjustmentNote: string;
-        activities: ScheduledActivity[];
-      }
-    >
-  >({});
-  const [isSynthesizing, setIsSynthesizing] = useState(false);
+  const [forecast, setForecast] = useState<StoredForecast | null>(null);
+  const [forecastLoading, setForecastLoading] = useState(false);
+  const [forecastStep, setForecastStep] = useState(0);
+  const [forecastError, setForecastError] = useState<string | null>(null);
+  const [saveProfileStatus, setSaveProfileStatus] = useState<string | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const savedProfileRef = useRef<UserProfile | null>(null);
+  const profileDirty = savedProfileRef.current !== profile;
   const [synthesisToast, setSynthesisToast] = useState<string | null>(null);
+  const forecastAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     try {
@@ -178,22 +213,16 @@ export default function App() {
     }
   }, [completedIds]);
 
+  useEffect(() => {
+    return () => {
+      forecastAbortRef.current?.abort();
+    };
+  }, []);
+
   // Generate 7-day astrological forecasts & energy maps
   const weeklyForecasts: DailyEnergyForecast[] = useMemo(() => {
-    const base = generateWeeklyForecasts(profile, sources);
-    return base.map((day) => {
-      const override = aiSynthesisOverride[day.dateIso];
-      if (!override) return day;
-      return {
-        ...day,
-        executiveSummary: override.executiveSummary,
-        dominantTransit: override.dominantTransit,
-        consensusScore: override.consensusScore,
-        timezoneAdjustmentNote: override.timezoneAdjustmentNote,
-        activities: override.activities,
-      };
-    });
-  }, [profile, sources, aiSynthesisOverride]);
+    return generateWeeklyForecasts(profile, sources);
+  }, [profile, sources]);
 
   const currentForecast =
     weeklyForecasts[selectedDayIndex] || weeklyForecasts[0];
@@ -234,111 +263,158 @@ export default function App() {
     }));
   };
 
-  const triggerSynthesis = async (customExcerpt?: string) => {
-    setIsSynthesizing(true);
-    setSynthesisToast(null);
-    const activeSources = sources.filter((s) => s.isActive);
+  // Deterministic Local Extraction for Custom Excerpt or Refresh
+  // Fallback to local deterministic extraction when offline or serverless
+  const apiBase = () => (profile.backendUrl || '').replace(/\/+$/, '');
 
+  const connectionErrorMessage = () =>
+    `Cannot connect to the forecast backend at ${
+      profile.backendUrl || 'same origin'
+    }. Ensure your server is running with CORS enabled.`;
+
+  const updateProfile = (updated: UserProfile) => {
+    setProfile(updated);
+  };
+
+  const handleSaveProfile = async () => {
+    if (isSavingProfile) return;
+    if (!isValidBackendUrl(profile.backendUrl)) {
+      setSaveProfileStatus(
+        'Invalid backend URL — use a plain http(s) origin without credentials, query, or fragment.'
+      );
+      return;
+    }
+    setIsSavingProfile(true);
+    setSaveProfileStatus(null);
+    const savedSnapshot = profile;
     try {
-      const response = await fetch('/api/horoscope/synthesize', {
+      const response = await fetch(`${apiBase()}/api/profiles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          profile: savedSnapshot,
+          profileId: profileId ?? undefined,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setSaveProfileStatus(
+          `Save failed (HTTP ${response.status}): ${data?.error || 'unknown error'}`
+        );
+        return;
+      }
+      if (data?.profileId) {
+        setProfileId(data.profileId);
+        try {
+          localStorage.setItem(STORAGE_KEYS.PROFILE_ID, data.profileId);
+        } catch {
+          // ignore
+        }
+      }
+      savedProfileRef.current = savedSnapshot;
+      setSaveProfileStatus(`Profile saved (ID ${data?.profileId || 'n/a'}).`);
+    } catch {
+      setSaveProfileStatus(connectionErrorMessage());
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const triggerForecast = async (customExcerpt?: string) => {
+    if (forecastLoading) return;
+    if (!isValidBackendUrl(profile.backendUrl)) {
+      setActiveTab('dashboard');
+      setForecastError(
+        'Invalid backend URL — use a plain http(s) origin without credentials, query, or fragment.'
+      );
+      return;
+    }
+    setActiveTab('dashboard');
+    forecastAbortRef.current?.abort();
+    const controller = new AbortController();
+    forecastAbortRef.current = controller;
+
+    setForecastLoading(true);
+    setForecastStep(0);
+    setForecastError(null);
+    setSynthesisToast(null);
+    setForecast(null);
+
+    try {
+      const response = await fetch(`${apiBase()}/api/horoscope/synthesize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
           profile,
-          sources: activeSources,
-          targetDate: currentForecast.dateIso,
+          profileId: profileId ?? undefined,
           customExcerpt,
         }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data && Array.isArray(data.activities) && data.activities.length > 0) {
-          const mappedActivities: ScheduledActivity[] = data.activities.map(
-            (item: any, idx: number) => {
-              const startHr = 8 + idx * 2;
-              return {
-                id: `synth-${currentForecast.dateIso}-${idx}`,
-                category: (item.category as ActivityCategory) || 'career',
-                title: item.title,
-                description: item.description,
-                sourceNativeWindow: `${item.utcWindow} (Multi-Source Normalized)`,
-                utcWindow: item.utcWindow,
-                localWindow: `${item.localWindow} (${formatTimezoneBadge(
-                  profile.operatingTimezone
-                )})`,
-                localStartHour: startHr,
-                localEndHour: startHr + 2,
-                significance: item.significance || 'favorable',
-                cosmicReason: item.cosmicReason,
-                sourceAttribution: item.sourceAttribution,
-                energyDimension: item.energyDimension || 'mental',
-                houseNumber: (idx * 2 + 1) % 12 || 10,
-              };
-            }
-          );
+      const contentType = response.headers.get('content-type') || '';
+      let payload: { result: ForecastResult; profileId: string | null };
 
-          setAiSynthesisOverride((prev) => ({
-            ...prev,
-            [currentForecast.dateIso]: {
-              executiveSummary: data.executiveSummary,
-              dominantTransit: data.dominantTransit,
-              consensusScore: data.consensusScore || 91,
-              timezoneAdjustmentNote: data.timezoneAdjustmentNote,
-              activities: mappedActivities,
-            },
-          }));
-          setSynthesisToast(
-            `Synthesized ${activeSources.length} sources → Normalized UTC → Projected to ${profile.operatingTimezone}`
+      if (contentType.includes('text/event-stream')) {
+        if (!response.body) {
+          throw new Error('Empty forecast stream.');
+        }
+        if (!response.ok) {
+          throw new Error(`Forecast request failed (HTTP ${response.status}).`);
+        }
+        payload = await readForecastSseStream(response.body, {
+          onProgress: (step) => setForecastStep(step),
+        });
+      } else {
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(
+            data?.error || `Forecast request failed (HTTP ${response.status}).`
           );
-          setIsSynthesizing(false);
-          setTimeout(() => setSynthesisToast(null), 4000);
-          return;
+        }
+        payload = data;
+      }
+
+      if (!isValidForecastShape(payload?.result)) {
+        throw new Error('Forecast response had an invalid result shape.');
+      }
+
+      const result = payload.result;
+      setForecast({
+        result,
+        rawJson: JSON.stringify(payload, null, 2),
+        generatedAt: new Date().toISOString(),
+        targetMonth: profile.targetMonth,
+        priorities: [...profile.priorities],
+        profileId: payload.profileId,
+      });
+      if (payload.profileId && payload.profileId !== profileId) {
+        setProfileId(payload.profileId);
+        try {
+          localStorage.setItem(STORAGE_KEYS.PROFILE_ID, payload.profileId);
+        } catch {
+          // ignore
         }
       }
-    } catch {
-      // Fallback to local deterministic extraction when offline or serverless
-    }
-
-    // Deterministic Local Extraction for Custom Excerpt or Refresh
-    if (customExcerpt) {
-      const win = convertSourceWindowToUserTimezone(
-        11,
-        13,
-        profile.operatingTimezone,
-        profile.operatingTimezone
+      setForecastStep(FORECAST_STEPS_TOTAL + 1);
+      setSynthesisToast(
+        `Generated ${result.events.length} source-backed events for ${profile.targetMonth}`
       );
-      const customExtractedAct: ScheduledActivity = {
-        id: `extracted-${Date.now()}`,
-        category: customExcerpt.toLowerCase().includes('financ')
-          ? 'finance'
-          : customExcerpt.toLowerCase().includes('social')
-          ? 'social'
-          : 'career',
-        title: 'Extracted Live Column Transit Window',
-        description: customExcerpt,
-        sourceNativeWindow: win.sourceNativeWindow,
-        utcWindow: win.utcWindow,
-        localWindow: win.localWindow,
-        localStartHour: win.localStartHour,
-        localEndHour: win.localEndHour,
-        significance: customExcerpt.toLowerCase().includes('avoid')
-          ? 'caution'
-          : 'favorable',
-        cosmicReason: `Correlated with ${effectiveChart.sign} (${effectiveChart.mode})`,
-        sourceAttribution: 'Live Excerpt Parser',
-        energyDimension: 'mental',
-        houseNumber: 10,
-      };
-      handleAddCustomActivity(customExtractedAct);
-      setActiveTab('dashboard');
+      setTimeout(() => setSynthesisToast(null), 5000);
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        setForecastError('Forecast request was cancelled.');
+      } else if (err instanceof TypeError) {
+        setForecastError(connectionErrorMessage());
+      } else {
+        setForecastError(err?.message || 'Forecast pipeline failed.');
+      }
+    } finally {
+      setForecastLoading(false);
     }
-
-    setSynthesisToast(
-      `Correlated ${activeSources.length} active sources via UTC normalization for ${effectiveChart.sign} (${profile.operatingTimezone})`
-    );
-    setIsSynthesizing(false);
-    setTimeout(() => setSynthesisToast(null), 4000);
   };
 
   return (
@@ -448,6 +524,10 @@ export default function App() {
                   <span aria-hidden="true">·</span>
                   <span className="font-mono text-cyan-300">
                     {profile.operatingTimezone} ({formatTimezoneBadge(profile.operatingTimezone)})
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span className="text-slate-500 italic">
+                    Local demo — not generated forecast
                   </span>
                 </div>
 
@@ -647,11 +727,157 @@ export default function App() {
               <span>All transits normalized to UTC &amp; projected to {profile.operatingTimezone}</span>
             </div>
           </div>
+
+          <div className="mt-5 pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <p className="text-xs text-slate-400">
+              Agent pipeline: Nebius query → Tavily search → Nebius aggregation
+              → .ics calendar for{' '}
+              <span className="text-amber-300 font-medium">
+                {profile.targetMonth}
+              </span>
+            </p>
+            <button
+              onClick={() => triggerForecast()}
+              disabled={forecastLoading}
+              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-violet-500 hover:bg-violet-400 text-white text-sm font-semibold flex items-center justify-center gap-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>
+                {forecastLoading
+                  ? 'Generating Forecast...'
+                  : 'Generate Personal Forecast'}
+              </span>
+            </button>
+          </div>
         </section>
 
         {/* Active Tab Viewport */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
+            {forecastLoading && <AgentProgress currentStep={forecastStep || 1} />}
+
+            {forecastError && !forecastLoading && (
+              <div
+                role="alert"
+                className="px-4 py-3 rounded-xl bg-rose-500/15 border border-rose-400/40 text-xs text-rose-200 flex items-center justify-between"
+              >
+                <span>{forecastError}</span>
+                <button
+                  onClick={() => setForecastError(null)}
+                  className="text-rose-300 hover:text-white font-mono ml-4 cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
+            {forecast && !forecastLoading && (
+              <section className="rounded-2xl bg-[#10172A] border border-slate-800/80 p-5 sm:p-6 space-y-5">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
+                  <div>
+                    <div className="text-xs text-slate-400">
+                      <span>Generated Monthly Forecast</span>
+                      <span className="mx-2" aria-hidden="true">·</span>
+                      <span className="font-mono text-amber-300">
+                        {forecast.targetMonth}
+                      </span>
+                      <span className="mx-2" aria-hidden="true">·</span>
+                      <span>
+                        {new Date(forecast.generatedAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <h2 className="text-lg sm:text-xl font-semibold text-slate-100 mt-1">
+                      Monthly Theme
+                    </h2>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <button
+                      onClick={() =>
+                        downloadIcs(
+                          forecast.result.ics_content,
+                          `celestialpulse-${forecast.targetMonth
+                            .toLowerCase()
+                            .replace(/\s+/g, '-')}.ics`
+                        )
+                      }
+                      className="min-h-[40px] px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-200 text-xs font-medium flex items-center gap-2 transition-colors whitespace-nowrap cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download .ics Calendar</span>
+                    </button>
+                    <CopyJsonButton rawJson={forecast.rawJson} />
+                  </div>
+                </div>
+
+                <p className="text-sm sm:text-base text-slate-300 leading-relaxed max-w-4xl">
+                  {forecast.result.overall_theme}
+                </p>
+
+                {forecast.result.events.length === 0 ? (
+                  <div className="px-4 py-6 rounded-xl bg-[#080B14] border border-slate-800/90 text-center">
+                    <p className="text-sm text-slate-300 font-medium">
+                      No source-backed events found for {forecast.targetMonth}.
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      The retrieved evidence did not contain adequately dated
+                      items for this month — nothing was fabricated to fill the
+                      gap.
+                    </p>
+                  </div>
+                ) : (
+                  <ol className="space-y-3">
+                    {forecast.result.events.map((ev, idx) => (
+                      <li
+                        key={`${ev.date}-${idx}`}
+                        className="p-4 rounded-xl bg-[#080B14] border border-slate-800/90"
+                      >
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                          <span className="font-mono text-amber-300 font-medium">
+                            {ev.date}
+                            {ev.end_date ? ` → ${ev.end_date}` : ''}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${impactBadgeClasses(
+                              ev.impact_type
+                            )}`}
+                          >
+                            {ev.impact_type}
+                          </span>
+                          {ev.topics.map((t) => (
+                            <span
+                              key={t}
+                              className="text-[11px] text-slate-400"
+                            >
+                              {PRIORITY_LABELS[t]}
+                            </span>
+                          ))}
+                        </div>
+                        <h3 className="text-base font-semibold text-slate-100 mt-1.5">
+                          {ev.title}
+                        </h3>
+                        <p className="text-sm text-slate-300 mt-1 leading-relaxed">
+                          {ev.summary}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                          {ev.source_urls.map((url) => (
+                            <a
+                              key={url}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] text-cyan-300 hover:underline font-mono truncate max-w-[300px]"
+                            >
+                              {url}
+                            </a>
+                          ))}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </section>
+            )}
+
             {/* Multi-Parameter Wave Chart */}
             <EnergyWaveChart
               forecasts={weeklyForecasts}
@@ -670,16 +896,14 @@ export default function App() {
               completedIds={completedIds}
               onToggleComplete={handleToggleComplete}
               onAddCustomActivity={handleAddCustomActivity}
-              onSynthesizeWithGemini={() => triggerSynthesis()}
-              isSynthesizing={isSynthesizing}
+              onSynthesizeWithGemini={() => triggerForecast()}
+              isSynthesizing={forecastLoading}
             />
 
-            {/* Weekly Transit Heatmap Matrix */}
             <TransitHeatmapMatrix
-              forecasts={weeklyForecasts}
-              selectedDayIndex={selectedDayIndex}
-              onSelectDayIndex={setSelectedDayIndex}
-              operatingTimezone={profile.operatingTimezone}
+              result={forecast?.result ?? null}
+              targetMonth={forecast?.targetMonth ?? profile.targetMonth}
+              priorities={forecast?.priorities ?? profile.priorities}
             />
           </div>
         )}
@@ -693,10 +917,9 @@ export default function App() {
               operatingTimezone={profile.operatingTimezone}
             />
             <TransitHeatmapMatrix
-              forecasts={weeklyForecasts}
-              selectedDayIndex={selectedDayIndex}
-              onSelectDayIndex={setSelectedDayIndex}
-              operatingTimezone={profile.operatingTimezone}
+              result={forecast?.result ?? null}
+              targetMonth={forecast?.targetMonth ?? profile.targetMonth}
+              priorities={forecast?.priorities ?? profile.priorities}
             />
           </div>
         )}
@@ -708,15 +931,28 @@ export default function App() {
             onToggleSource={handleToggleSource}
             onChangeWeight={handleChangeSourceWeight}
             onAddSuggestedSource={handleAddSuggestedSource}
-            onExtractLiveText={(excerpt) => triggerSynthesis(excerpt)}
-            isSynthesizing={isSynthesizing}
+            onExtractLiveText={(excerpt) => {
+              setActiveTab('dashboard');
+              triggerForecast(excerpt);
+            }}
+            isSynthesizing={forecastLoading}
           />
         )}
 
         {activeTab === 'profile' && (
           <NatalProfilePanel
             profile={profile}
-            onUpdateProfile={(updated) => setProfile(updated)}
+            onUpdateProfile={updateProfile}
+            onSaveProfile={handleSaveProfile}
+            isSavingProfile={isSavingProfile}
+            saveProfileStatus={
+              isSavingProfile
+                ? saveProfileStatus
+                : profileDirty
+                ? 'Unsaved changes'
+                : saveProfileStatus
+            }
+            backendUrlValid={isValidBackendUrl(profile.backendUrl)}
           />
         )}
       </main>
@@ -802,3 +1038,33 @@ export default function App() {
     </div>
   );
 }
+
+const CopyJsonButton: React.FC<{ rawJson: string }> = ({ rawJson }) => {
+  const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
+
+  const handleCopy = async () => {
+    try {
+      await copyToClipboard(rawJson);
+      setStatus('copied');
+    } catch {
+      setStatus('failed');
+    }
+    setTimeout(() => setStatus('idle'), 2500);
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#080B14] hover:bg-slate-800/70 border border-slate-800 text-slate-200 text-xs font-medium flex items-center gap-2 transition-colors whitespace-nowrap cursor-pointer"
+    >
+      <Clipboard className="w-3.5 h-3.5" />
+      <span>
+        {status === 'copied'
+          ? 'Copied!'
+          : status === 'failed'
+          ? 'Copy Failed'
+          : 'Copy Forecast JSON'}
+      </span>
+    </button>
+  );
+};

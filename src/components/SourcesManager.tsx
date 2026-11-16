@@ -303,7 +303,7 @@ export const SourcesManager: React.FC<SourcesManagerProps> = ({
               On-Demand Column, Blog &amp; Video Transcript Parser
             </div>
             <h3 className="text-base font-semibold text-slate-100 mt-0.5">
-              Correlate Custom Horoscope Excerpt into Your Energy Map
+              Include a Custom Horoscope Excerpt in Your Monthly Forecast
             </h3>
           </div>
           <span className="text-xs font-mono text-violet-300">
@@ -321,7 +321,7 @@ export const SourcesManager: React.FC<SourcesManagerProps> = ({
           />
           <div className="flex items-center justify-between gap-4">
             <p className="text-xs text-slate-400">
-              Extracts transit windows, normalizes source timestamps to UTC, and updates your personalized schedule.
+              Pasted excerpts are sent to the forecast agent as supplementary untrusted context — they are not crawled or verified by Tavily.
             </p>
             <button
               onClick={() => {

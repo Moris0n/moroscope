@@ -1,229 +1,269 @@
-import React, { useState } from 'react';
-import { DailyEnergyForecast, EnergyDimension } from '../types/astrology';
-import { ENERGY_DIMENSIONS_METADATA } from '../utils/astrologyEngine';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ForecastResult,
+  LifePriority,
+} from '../types/astrology';
+import {
+  LIFE_PRIORITIES,
+  PRIORITY_LABELS,
+  parseMonthRange,
+} from '../utils/forecastShared';
+import {
+  buildMonthlyHeatmap,
+  impactBadgeClasses,
+} from '../utils/forecastHelpers';
 
 interface TransitHeatmapMatrixProps {
-  forecasts: DailyEnergyForecast[];
-  selectedDayIndex: number;
-  onSelectDayIndex: (index: number) => void;
-  operatingTimezone: string;
+  result: ForecastResult | null;
+  targetMonth: string;
+  priorities: LifePriority[];
 }
 
-type HeatmapMetric = 'compositeVitality' | EnergyDimension;
+interface SelectedCell {
+  priority: LifePriority;
+  date: string;
+}
 
 export const TransitHeatmapMatrix: React.FC<TransitHeatmapMatrixProps> = ({
-  forecasts,
-  selectedDayIndex,
-  onSelectDayIndex,
-  operatingTimezone,
+  result,
+  targetMonth,
+  priorities,
 }) => {
-  const [metric, setMetric] = useState<HeatmapMetric>('compositeVitality');
-  const [selectedHour, setSelectedHour] = useState<number>(10);
+  const [selected, setSelected] = useState<SelectedCell | null>(null);
 
-  const inspectedDay = forecasts[selectedDayIndex] || forecasts[0];
-  const inspectedSlot = inspectedDay.hours[selectedHour] || inspectedDay.hours[0];
+  const range = useMemo(() => parseMonthRange(targetMonth), [targetMonth]);
+  const rows = priorities.length > 0 ? priorities : LIFE_PRIORITIES;
+  const matrix = useMemo(
+    () =>
+      range && result ? buildMonthlyHeatmap(result.events, range, rows) : null,
+    [result, range, rows]
+  );
 
-  const getCellStyle = (value: number, currentMetric: HeatmapMetric) => {
-    if (currentMetric === 'financialRisk') {
-      // High value = high risk (rose/crimson)
-      if (value >= 80) return 'bg-rose-500/85 text-white';
-      if (value >= 65) return 'bg-rose-500/50 text-rose-100';
-      if (value >= 45) return 'bg-amber-500/30 text-amber-200';
-      return 'bg-slate-800/60 text-slate-400';
-    }
+  useEffect(() => {
+    setSelected(null);
+  }, [result, targetMonth, priorities]);
 
-    if (value >= 82) return 'bg-amber-400/85 text-slate-950 font-semibold';
-    if (value >= 70) return 'bg-violet-500/65 text-white';
-    if (value >= 55) return 'bg-cyan-500/40 text-cyan-100';
-    if (value >= 40) return 'bg-slate-800/80 text-slate-300';
-    return 'bg-[#0B0F1C] text-slate-500';
-  };
+  const dayHeaders = range
+    ? Array.from({ length: range.daysInMonth }, (_, i) => i + 1)
+    : [];
 
-  const metricButtons: { id: HeatmapMetric; label: string }[] = [
-    { id: 'compositeVitality', label: 'Composite Vitality' },
-    { id: 'mental', label: 'Mental Focus' },
-    { id: 'physical', label: 'Physical Drive' },
-    { id: 'creative', label: 'Creative Spark' },
-    { id: 'social', label: 'Social Flow' },
-    { id: 'financialRisk', label: 'Financial Caution' },
-  ];
-
-  // Sample 12 2-hour blocks or all 24 hours cleanly
-  const displayHours = Array.from({ length: 24 }, (_, i) => i);
+  const selectedCell = useMemo(() => {
+    if (!selected || !matrix) return null;
+    const rIdx = rows.indexOf(selected.priority);
+    if (rIdx < 0) return null;
+    return (
+      matrix[rIdx].find((c) => c.date === selected.date) || null
+    );
+  }, [selected, matrix, rows]);
 
   return (
     <div className="rounded-2xl bg-[#10172A] border border-slate-800/80 p-5 sm:p-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
         <div>
           <div className="text-xs text-slate-400">
-            <span>7-Day × 24-Hour Local Transit Matrix</span>
+            <span>Monthly Day-by-Topic Transit Matrix</span>
             <span className="mx-2" aria-hidden="true">·</span>
-            <span className="font-mono">{operatingTimezone}</span>
+            <span className="font-mono text-amber-300">{targetMonth}</span>
           </div>
           <h2 className="text-lg sm:text-xl font-semibold text-slate-100 mt-1">
-            Weekly Hourly Energy &amp; Caution Heatmap
+            Sourced Monthly Event Heatmap
           </h2>
         </div>
 
-        {/* Metric Selector */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {metricButtons.map((btn) => (
-            <button
-              key={btn.id}
-              onClick={() => setMetric(btn.id)}
-              className={`min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                metric === btn.id
-                  ? btn.id === 'financialRisk'
-                    ? 'bg-rose-500/25 border border-rose-400/50 text-rose-200'
-                    : 'bg-amber-500/20 border border-amber-400/40 text-amber-200'
-                  : 'bg-[#080B14] border border-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {btn.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Heatmap Grid */}
-      <div className="mt-5 overflow-x-auto">
-        <div className="min-w-[720px]">
-          {/* Hour Header Row */}
-          <div className="grid grid-cols-[110px_repeat(24,minmax(0,1fr))] gap-1 mb-1.5 items-center">
-            <div className="text-[11px] font-mono text-slate-500">
-              Day / Local Hr
-            </div>
-            {displayHours.map((hr) => (
-              <div
-                key={`hdr-${hr}`}
-                className={`text-center font-mono text-[10px] ${
-                  hr === selectedHour ? 'text-amber-300 font-semibold' : 'text-slate-500'
-                }`}
-              >
-                {String(hr).padStart(2, '0')}
-              </div>
-            ))}
-          </div>
-
-          {/* 7 Day Rows */}
-          <div className="space-y-1.5">
-            {forecasts.map((day, dIdx) => {
-              const isSelectedDay = dIdx === selectedDayIndex;
-              return (
-                <div
-                  key={day.dateIso}
-                  className="grid grid-cols-[110px_repeat(24,minmax(0,1fr))] gap-1 items-center"
-                >
-                  <button
-                    onClick={() => onSelectDayIndex(dIdx)}
-                    className={`min-h-[34px] text-left px-2 py-1 rounded-lg text-xs font-medium transition-colors truncate cursor-pointer ${
-                      isSelectedDay
-                        ? 'bg-slate-800 text-amber-300'
-                        : 'text-slate-300 hover:bg-slate-800/50'
-                    }`}
-                  >
-                    {day.dayShort}
-                  </button>
-
-                  {day.hours.map((slot) => {
-                    const val =
-                      metric === 'compositeVitality'
-                        ? slot.compositeVitality
-                        : slot[metric];
-                    const isSelectedCell =
-                      isSelectedDay && slot.hourLocal === selectedHour;
-
-                    return (
-                      <button
-                        key={`${day.dateIso}-${slot.hourLocal}`}
-                        onClick={() => {
-                          onSelectDayIndex(dIdx);
-                          setSelectedHour(slot.hourLocal);
-                        }}
-                        title={`${day.dayShort} ${slot.timeLabelLocal} (${slot.timeLabelUtc}): ${val}% — ${slot.dominantAspect}`}
-                        className={`h-8 rounded-md font-mono text-[10px] tabular-nums flex items-center justify-center transition-transform cursor-pointer ${getCellStyle(
-                          val,
-                          metric
-                        )} ${
-                          isSelectedCell
-                            ? 'ring-2 ring-white scale-105 z-10'
-                            : 'hover:opacity-90'
-                        }`}
-                      >
-                        {val}
-                      </button>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Legend & Inspected Cell Detail */}
-      <div className="mt-5 pt-4 border-t border-slate-800/80 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="text-xs text-slate-300 space-y-1">
-          <div className="text-slate-400">
-            <span>Selected Matrix Cell: </span>
-            <strong className="text-slate-100">{inspectedDay.dayLabel}</strong>
-            <span className="mx-1.5" aria-hidden="true">·</span>
-            <span className="font-mono text-amber-300">
-              {inspectedSlot.timeLabelLocal} Local
-            </span>
-            <span className="mx-1.5" aria-hidden="true">·</span>
-            <span className="font-mono text-violet-300">
-              {inspectedSlot.timeLabelUtc}
-            </span>
-          </div>
-          <div>
-            <span>Active Transit: </span>
-            <span className="text-slate-100 font-medium">
-              {inspectedSlot.dominantAspect}
-            </span>
-            <span className="mx-2" aria-hidden="true">·</span>
-            <span>Ruler: {inspectedSlot.activePlanet}</span>
-          </div>
-        </div>
-
         <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400">
-          {metric === 'financialRisk' ? (
-            <>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-slate-800/80 inline-block" />
-                Low Caution (&lt;45)
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-amber-500/30 inline-block" />
-                Moderate (45–64)
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-rose-500/85 inline-block" />
-                High Caution Window (65+)
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-[#0B0F1C] border border-slate-800 inline-block" />
-                Rest / Recovery (&lt;40)
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-cyan-500/40 inline-block" />
-                Steady Flow (55–69)
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-violet-500/65 inline-block" />
-                High Alignment (70–81)
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-amber-400/85 inline-block" />
-                Peak Power Window (82+)
-              </span>
-            </>
-          )}
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-sm bg-emerald-500/60 inline-block" />
+            Opportunity
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-sm bg-amber-500/60 inline-block" />
+            Caution
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-sm bg-violet-500/60 inline-block" />
+            Milestone
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-sm bg-gradient-to-br from-emerald-500/40 via-amber-500/40 to-violet-500/40 inline-block" />
+            Mixed
+          </span>
         </div>
       </div>
+
+      {!matrix || !result ? (
+        <div className="mt-6 py-10 text-center space-y-2">
+          <p className="text-sm text-slate-300 font-medium">
+            No generated forecast yet for {targetMonth}.
+          </p>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            Run &ldquo;Generate Personal Forecast&rdquo; from the Dashboard. Every colored
+            cell below maps to a source-backed event — empty cells simply mean no
+            sourced event covers that day, not an unfavorable one.
+          </p>
+        </div>
+      ) : (
+        <>
+          {result.events.length === 0 && (
+            <div className="mt-4 px-4 py-3 rounded-xl bg-[#080B14] border border-slate-800/90 text-xs text-slate-400">
+              No adequately dated, source-backed events were found for this
+              month — all cells are intentionally empty. See the theme summary
+              for the evidence gap.
+            </div>
+          )}
+
+          <div className="mt-5 overflow-x-auto">
+            <div className="min-w-[900px]">
+              <div
+                className="grid gap-1 mb-1.5 items-center"
+                style={{
+                  gridTemplateColumns: `150px repeat(${range!.daysInMonth}, minmax(0,1fr))`,
+                }}
+              >
+                <div className="text-[11px] font-mono text-slate-500">
+                  Topic / Day
+                </div>
+                {dayHeaders.map((d) => (
+                  <div
+                    key={`hdr-${d}`}
+                    className="text-center font-mono text-[10px] text-slate-500"
+                  >
+                    {String(d).padStart(2, '0')}
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-1.5">
+                {priorities.length === 0 && (
+                  <p className="text-xs text-slate-500 py-2">
+                    No life priorities selected — showing all five topic rows.
+                  </p>
+                )}
+                {matrix.map((row, rIdx) => {
+                  const priority = rows[rIdx];
+                  return (
+                    <div
+                      key={priority}
+                      className="grid gap-1 items-center"
+                      style={{
+                        gridTemplateColumns: `150px repeat(${range!.daysInMonth}, minmax(0,1fr))`,
+                      }}
+                    >
+                      <div className="text-xs font-medium text-slate-300 truncate pr-2">
+                        {PRIORITY_LABELS[priority]}
+                      </div>
+                      {row.map((cell) => {
+                        const isSelected =
+                          selected?.priority === priority &&
+                          selected.date === cell.date;
+                        const classes =
+                          cell.impacts.size === 0
+                            ? 'bg-[#0B0F1C] text-slate-600'
+                            : cell.impacts.size > 1
+                            ? 'bg-gradient-to-br from-emerald-500/40 via-amber-500/40 to-violet-500/40 text-white font-semibold'
+                            : cell.impacts.has('Opportunity')
+                            ? 'bg-emerald-500/60 text-emerald-50'
+                            : cell.impacts.has('Caution')
+                            ? 'bg-amber-500/60 text-amber-50'
+                            : 'bg-violet-500/60 text-violet-50';
+                        const impactDesc =
+                          cell.impacts.size === 0
+                            ? 'No sourced event'
+                            : cell.impacts.size > 1
+                            ? `Mixed: ${[...cell.impacts].join(' & ')}`
+                            : [...cell.impacts][0];
+                        return (
+                          <button
+                            key={cell.date}
+                            onClick={() =>
+                              setSelected({ priority, date: cell.date })
+                            }
+                            aria-label={`${PRIORITY_LABELS[priority]} on ${cell.date}: ${impactDesc}`}
+                            title={`${cell.date} — ${impactDesc}`}
+                            className={`h-8 rounded-md font-mono text-[10px] tabular-nums flex items-center justify-center transition-transform cursor-pointer ${classes} ${
+                              isSelected
+                                ? 'ring-2 ring-white scale-105 z-10'
+                                : 'hover:opacity-90'
+                            }`}
+                          >
+                            {cell.impacts.size > 1 ? '◆' : ''}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 pt-4 border-t border-slate-800/80">
+            {selected && selectedCell && selectedCell.events.length > 0 ? (
+              <div className="space-y-3">
+                <div className="text-xs text-slate-400">
+                  <span className="text-amber-300 font-medium">
+                    {PRIORITY_LABELS[selected.priority]}
+                  </span>
+                  <span className="mx-2" aria-hidden="true">·</span>
+                  <span className="font-mono">{selected.date}</span>
+                </div>
+                {selectedCell.events.map((ev, i) => (
+                  <div
+                    key={`${ev.date}-${i}`}
+                    className="p-3 rounded-xl bg-[#080B14] border border-slate-800/90"
+                  >
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${impactBadgeClasses(
+                          ev.impact_type
+                        )}`}
+                      >
+                        {ev.impact_type}
+                      </span>
+                      <span className="font-mono text-slate-400">
+                        {ev.date}
+                        {ev.end_date ? ` → ${ev.end_date}` : ''}
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-semibold text-slate-100 mt-1.5">
+                      {ev.title}
+                    </h3>
+                    <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                      {ev.summary}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                      {ev.source_urls.map((url) => (
+                        <a
+                          key={url}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-cyan-300 hover:underline font-mono truncate max-w-[280px]"
+                        >
+                          {url}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : selected ? (
+              <p className="text-xs text-slate-400">
+                <span className="text-amber-300 font-medium">
+                  {PRIORITY_LABELS[selected.priority]}
+                </span>
+                <span className="mx-2" aria-hidden="true">·</span>
+                <span className="font-mono">{selected.date}</span> — No
+                sourced event covers this day.
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Select a day cell to inspect the source-backed events covering
+                it. Multi-impact days are marked ◆.
+              </p>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };

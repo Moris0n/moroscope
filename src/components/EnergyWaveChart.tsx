@@ -142,6 +142,8 @@ export const EnergyWaveChart: React.FC<EnergyWaveChartProps> = ({
           <div className="text-xs text-slate-400">
             <span>Multi-Parameter Astrological Wave</span>
             <span className="mx-2" aria-hidden="true">·</span>
+            <span className="text-slate-500 italic">Local demo — not generated forecast</span>
+            <span className="mx-2" aria-hidden="true">·</span>
             <span className="font-mono">{operatingTimezone}</span>
             <span className="mx-2" aria-hidden="true">·</span>
             <span>Ruler: {currentDay.chartRulerUsed.sign} ({currentDay.chartRulerUsed.mode})</span>

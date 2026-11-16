@@ -1,7 +1,17 @@
-import React from 'react';
-import { Compass, Globe, Sparkles, Sun, Moon, Clock } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  Compass,
+  Globe,
+  Save,
+  Settings2,
+  Sparkles,
+  Sun,
+  Moon,
+  Clock,
+} from 'lucide-react';
 import {
   ActivityCategory,
+  LifePriority,
   UserProfile,
   ZodiacSign,
 } from '../types/astrology';
@@ -19,10 +29,19 @@ import {
   detectLocalTimezone,
   formatTimezoneBadge,
 } from '../utils/timezoneEngine';
+import {
+  LIFE_PRIORITIES,
+  PRIORITY_LABELS,
+  parseMonthRange,
+} from '../utils/forecastShared';
 
 interface NatalProfilePanelProps {
   profile: UserProfile;
   onUpdateProfile: (updated: UserProfile) => void;
+  onSaveProfile: () => void;
+  isSavingProfile: boolean;
+  saveProfileStatus: string | null;
+  backendUrlValid: boolean;
 }
 
 const ALL_CATEGORIES: ActivityCategory[] = [
@@ -39,7 +58,24 @@ const ALL_CATEGORIES: ActivityCategory[] = [
 export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
   profile,
   onUpdateProfile,
+  onSaveProfile,
+  isSavingProfile,
+  saveProfileStatus,
+  backendUrlValid,
 }) => {
+  const [showBackendSettings, setShowBackendSettings] = useState(false);
+  const targetMonthValid = !!parseMonthRange(profile.targetMonth);
+
+  const togglePriority = (p: LifePriority) => {
+    const exists = profile.priorities.includes(p);
+    onUpdateProfile({
+      ...profile,
+      priorities: exists
+        ? profile.priorities.filter((x) => x !== p)
+        : [...profile.priorities, p],
+    });
+  };
+
   const effectiveChart = getEffectiveChartSign(profile);
   const sunMeta = ZODIAC_METADATA[profile.sunSign];
   const moonMeta = ZODIAC_METADATA[profile.moonSign];
@@ -493,6 +529,142 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
             })}
           </div>
         </div>
+      </div>
+
+      <div className="rounded-2xl bg-[#10172A] border border-slate-800/80 p-5 sm:p-6">
+        <div className="pb-5 border-b border-slate-800/80">
+          <div className="text-xs text-slate-400">
+            Agentic Monthly Forecast Pipeline · Nebius → Tavily → Nebius → .ics
+          </div>
+          <h3 className="text-base font-semibold text-slate-100 mt-1">
+            Target Month, Life Focus &amp; Backend Connection
+          </h3>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label
+              htmlFor="target-month-input"
+              className="block text-xs font-medium text-slate-300 mb-1.5"
+            >
+              Target Month (e.g., &ldquo;November 2026&rdquo;)
+            </label>
+            <input
+              id="target-month-input"
+              type="text"
+              value={profile.targetMonth}
+              onChange={(e) =>
+                onUpdateProfile({ ...profile, targetMonth: e.target.value })
+              }
+              placeholder="November 2026"
+              className={`w-full h-11 px-3.5 rounded-xl bg-[#080B14] border text-sm text-slate-100 focus:outline-none focus:border-amber-400 ${
+                targetMonthValid ? 'border-slate-800' : 'border-rose-500/60'
+              }`}
+            />
+            {!targetMonthValid && (
+              <p className="mt-1 text-[11px] text-rose-300">
+                Use English month + 4-digit year, e.g. &ldquo;November 2026&rdquo;.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-medium text-slate-300">
+                Backend API Base URL
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowBackendSettings((v) => !v)}
+                aria-expanded={showBackendSettings}
+                className="min-h-[32px] px-2.5 py-1 rounded-lg bg-[#080B14] border border-slate-800 text-slate-400 hover:text-slate-200 text-[11px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+                {showBackendSettings ? 'Hide' : 'Configure'}
+              </button>
+            </div>
+            {showBackendSettings ? (
+              <>
+                <input
+                  type="url"
+                  value={profile.backendUrl}
+                  onChange={(e) =>
+                    onUpdateProfile({ ...profile, backendUrl: e.target.value })
+                  }
+                  placeholder="https://api.example.com (empty = same origin)"
+                  className={`w-full h-11 px-3.5 rounded-xl bg-[#080B14] border text-sm text-slate-100 font-mono focus:outline-none focus:border-amber-400 ${
+                    backendUrlValid ? 'border-slate-800' : 'border-rose-500/60'
+                  }`}
+                />
+                {!backendUrlValid && (
+                  <p className="mt-1 text-[11px] text-rose-300">
+                    Must be a plain http(s) origin — no credentials, query, or
+                    fragment.
+                  </p>
+                )}
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Connection setting only — stored locally in this browser,
+                  never sent upstream or persisted in your server profile.
+                </p>
+              </>
+            ) : (
+              <div className="h-11 px-3.5 rounded-xl bg-[#080B14]/60 border border-slate-800/80 flex items-center text-xs text-slate-400 font-mono truncate">
+                {profile.backendUrl || 'Same origin (this server)'}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-5 pt-5 border-t border-slate-800/80">
+          <h4 className="text-sm font-semibold text-slate-100">
+            Life Focus Priorities
+          </h4>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Monthly forecast events are tagged to these domains — they drive the
+            topic rows of the monthly heatmap.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {LIFE_PRIORITIES.map((p) => {
+              const isSelected = profile.priorities.includes(p);
+              return (
+                <button
+                  type="button"
+                  key={p}
+                  onClick={() => togglePriority(p)}
+                  aria-pressed={isSelected}
+                  className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${
+                    isSelected
+                      ? 'bg-amber-500/20 border-amber-400/50 text-amber-200'
+                      : 'bg-[#080B14] border-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {PRIORITY_LABELS[p]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-6 pt-5 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <p className="text-xs text-slate-500">
+            Saves your profile to the server (data/profiles) so the forecast
+            pipeline works from an immutable snapshot.
+          </p>
+          <button
+            type="button"
+            onClick={onSaveProfile}
+            disabled={isSavingProfile || !targetMonthValid || !backendUrlValid}
+            className="min-h-[42px] px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold flex items-center justify-center gap-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50"
+          >
+            <Save className="w-4 h-4" />
+            <span>{isSavingProfile ? 'Saving Profile...' : 'Save Profile'}</span>
+          </button>
+        </div>
+        {saveProfileStatus && (
+          <p className="mt-2 text-xs text-violet-200" role="status">
+            {saveProfileStatus}
+          </p>
+        )}
       </div>
     </div>
   );

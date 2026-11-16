@@ -51,7 +51,7 @@ export const PWAInstallButton: React.FC = () => {
             </div>
             <div className="mt-4 space-y-3 text-sm text-slate-300 leading-relaxed">
               <p>
-                CelestialPulse is a serverless-ready Progressive Web App with full offline ephemeris &amp; timezone caching.
+                CelestialPulse is a Progressive Web App that caches the app shell and demo data for offline viewing; generated forecasts require a connection to the backend.
               </p>
               {isIOS ? (
                 <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2 text-xs">

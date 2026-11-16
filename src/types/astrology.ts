@@ -35,6 +35,31 @@ export type EnergyDimension =
 
 export type SourceType = 'newspaper' | 'column' | 'blog' | 'video';
 
+export type LifePriority =
+  | 'careerTransition'
+  | 'contractNegotiations'
+  | 'datingRomance'
+  | 'healthHabits'
+  | 'financialPlanning';
+
+export type ImpactType = 'Opportunity' | 'Caution' | 'Milestone';
+
+export interface TransitEvent {
+  date: string;
+  end_date?: string;
+  title: string;
+  impact_type: ImpactType;
+  summary: string;
+  topics: LifePriority[];
+  source_urls: string[];
+}
+
+export interface ForecastResult {
+  overall_theme: string;
+  events: TransitEvent[];
+  ics_content: string;
+}
+
 export interface UserProfile {
   name: string;
   birthDate: string; // YYYY-MM-DD
@@ -48,6 +73,9 @@ export interface UserProfile {
   risingSign?: ZodiacSign;
   useRisingPrimary: boolean; // When true and hasExactTime is true, Rising sign rules chart
   activeCategories: ActivityCategory[];
+  targetMonth: string;
+  priorities: LifePriority[];
+  backendUrl: string;
 }
 
 export interface HoroscopeSource {
