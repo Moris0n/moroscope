@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "CelestialPulse — Horoscope & Energy Map",
-  "short_name": "Celestial",
-  "description": "Multi-source horoscope aggregator, timezone-normalized transit synthesizer, and interactive weekly energy level map PWA.",
+  "name": "Moroscope — Personal Monthly Astrology Planner",
+  "short_name": "Moroscope",
+  "description": "Personal monthly astrology planner: source-cited key dates and good-time windows, exportable to your calendar.",
   "theme_color": "#080B14",
   "background_color": "#080B14",
   "display": "standalone",

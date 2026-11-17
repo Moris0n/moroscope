@@ -24,7 +24,7 @@ interface ActivitySchedulerProps {
   completedIds: string[];
   onToggleComplete: (id: string) => void;
   onAddCustomActivity: (activity: ScheduledActivity) => void;
-  onSynthesizeWithGemini: () => void;
+  onGenerateForecast: () => void;
   isSynthesizing: boolean;
 }
 
@@ -46,7 +46,7 @@ export const ActivityScheduler: React.FC<ActivitySchedulerProps> = ({
   completedIds,
   onToggleComplete,
   onAddCustomActivity,
-  onSynthesizeWithGemini,
+  onGenerateForecast,
   isSynthesizing,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<'all' | ActivityCategory>('all');
@@ -168,7 +168,7 @@ export const ActivityScheduler: React.FC<ActivitySchedulerProps> = ({
 
         <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={onSynthesizeWithGemini}
+            onClick={onGenerateForecast}
             disabled={isSynthesizing}
             className="min-h-[40px] px-3.5 py-2 rounded-xl bg-violet-500/20 hover:bg-violet-500/30 border border-violet-400/30 text-violet-200 text-xs font-medium flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50"
           >

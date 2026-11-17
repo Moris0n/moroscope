@@ -1,8 +1,6 @@
 {
   "name": "Moroscope",
-  "description": "Multi-source horoscope aggregator, timezone-normalized transit synthesizer, and interactive weekly energy level map PWA.",
+  "description": "Personal monthly astrology planner: source-cited key dates and good-time windows, exportable to your calendar.",
   "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "majorCapabilities": []
 }

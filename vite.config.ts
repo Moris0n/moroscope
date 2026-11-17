@@ -14,9 +14,9 @@ export default defineConfig(() => {
         includeAssets: ['icon.svg', 'apple-touch-icon.png'],
         manifest: {
           id: '/',
-          name: 'CelestialPulse — Horoscope & Energy Map',
-          short_name: 'Celestial',
-          description: 'Multi-source horoscope aggregator, timezone-normalized transit synthesizer, and interactive weekly energy level map PWA.',
+          name: 'Moroscope — Personal Monthly Astrology Planner',
+          short_name: 'Moroscope',
+          description: 'Personal monthly astrology planner: source-cited key dates and good-time windows, exportable to your calendar.',
           theme_color: '#080B14',
           background_color: '#080B14',
           display: 'standalone',
@@ -45,6 +45,7 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          navigateFallbackDenylist: [/^\/api\//],
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -87,6 +88,16 @@ export default defineConfig(() => {
       },
     },
     server: {
+      host: '127.0.0.1',
+      port: 3000,
+      strictPort: true,
+      proxy: {
+        '/api': {
+          target: `http://127.0.0.1:${process.env.API_PORT || 8000}`,
+          // Keep the browser's Host header: the API only accepts same-origin requests.
+          changeOrigin: false,
+        },
+      },
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: false,

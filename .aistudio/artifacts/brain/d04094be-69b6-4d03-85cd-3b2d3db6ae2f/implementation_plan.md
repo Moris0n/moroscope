@@ -1,187 +1,262 @@
-# CelestialPulse: Multi-Source Horoscope Aggregator & Personal Energy Map
+# Moroscope: Personal Monthly Astrology Planner
 
-CelestialPulse is a mobile-first Progressive Web App (PWA) that systematically aggregates horoscopes from diverse columns, blogs, and video astrologers, normalizes source timezones to UTC, and synthesizes them against user birth profiles (prioritizing Rising sign, falling back to Sun sign) to generate precision-timed local daily activity schedules and interactive weekly energy level wave charts and heatmap matrices.
+Moroscope turns a user's birth chart, real-life context and trusted astrology sources into a **personal monthly planning tool**: key dates, "good time to…" windows and cautions per life area, shown as a visual month map and exportable to any calendar (`.ics`).
 
-## User Review & Critical Decisions
+Astrology is framed as interpretive planning guidance, never as prediction, financial advice or medical advice.
 
-> [!IMPORTANT]
-> **Confirmed Product & Architecture Specifications:**
-> - **Timezone Normalization Architecture (New)**:
->   - **User Timezone Collection**: Automatically detects local device timezone via `Intl.DateTimeFormat().resolvedOptions().timeZone` while providing intuitive manual override controls in the profile header. Supports dual timezones: *Birth Timezone* (crucial for accurate Ascendant/Rising Sign house cusp calculation) and *Current Operating Timezone* (for live transit timing and daily activity calendar slots).
->   - **Source Timezone Normalization Pipeline**: Every curated or suggested source specifies its native publication timezone (e.g., Eastern US for Susan Miller, UTC/GMT for UK astrologers, AEST for Australian channels). All extracted transits, moon void-of-course periods, and planetary aspects are first normalized to a common UTC standard before being localized to the user's active timezone.
-> - **Visual Atmosphere**: Deep celestial dark theme (`#080B14` canvas, `#10172A` surfaces) with luminous nebula accents (starlight gold `#F59E0B`, ethereal violet `#8B5CF6`, cosmic cyan `#06B6D4`, and rose quartz `#F43F5E`).
-> - **Energy Level Map Visualization**: Dual-view visualization featuring an interactive multi-parameter spline wave chart (tracking 6 cosmic dimensions across the week) alongside an hourly/daily transit heatmap matrix.
-> - **Activity Scope**: Comprehensive activity suite spanning Career & Projects, Social & Romance, Hobbies & Creativity, Financial Decisions & Cautions, Physical Wellness, Mind & Spirit, Strategic Decisions, and Rest Windows.
-> - **Sign Priority Logic**: Rising sign (Ascendant) dictates the houses, transit impacts, and activity timings; if the user's birth time is unknown, the engine seamlessly falls back to the Sun sign with transparent UI notation.
+> This plan replaces the original AI Studio design (Gemini, daily schedules, source crawling). For the current state of the code see [`project.md`](../../../../project.md).
 
----
+## Confirmed decisions
 
-## 1. Overview & Core Concept
-
-- **What It Does**: CelestialPulse aggregates daily and weekly horoscopes from verified publications (newspaper columns, esoteric blogs, and astrologer video transcripts), extracts recurring planetary themes and house transits, standardizes multi-source timelines into UTC, and maps them directly onto the user's personal day in their local timezone. It computes 6 distinct energy dimensions (Mental Focus, Creative Spark, Social Vitality, Physical Drive, Emotional Resonance, and Financial Caution) and schedules optimal windows for projects, socializing, workouts, and high-risk financial decisions.
-- **Target Audience / Persona**: Astrologically curious and conscious individuals who want actionable, reliable timing—grounded in real astronomical transits and cross-source consensus rather than generic, untimed one-paragraph horoscopes.
-- **Key Value**: Solves the critical problem of timezone discrepancies in astrological forecasts (e.g., a "Tuesday morning transit" published in London occurring on Monday night in California). Unifies, normalizes, and localizes diverse astrological insights into an intuitive, interactive biorhythm and schedule.
+| Topic | Decision |
+|---|---|
+| Backend | Python (FastAPI), migrated first, in Phase 0, as a 1:1 port with tests before any new feature |
+| Sign derivation | Real ephemeris on the Python server (Skyfield) plus birth-place geocoding; the client caches the last chart for offline viewing |
+| Storage | On the user's device only for now; accounts in a later phase |
+| Calendar | `.ics` download only (full month and per event) |
+| Default sources | Curated list first, falling back to open web search |
+| User sources | Exclusive: if the user added sources, only those are used |
+| Energy charts | Hidden for now (they run on fake data); rebuilt later on real transits |
+| Categories | 10 house-based life areas, replacing both current lists |
 
 ---
 
-## 2. User Experience & Visual Design
+## 1. Vision
 
-### Key User Flows
+**Target user:** astrology-curious people who want actionable, dated guidance tailored to their situation (job hunt, new relationship, parenting, and so on), not generic sun-sign paragraphs.
 
-1. **Onboarding & Astrological Profiling**:
-   - Quick entry of Name, Date of Birth, Birth Time, Birth Location (City/Country), and Birth Timezone.
-   - Auto-detection of user's current operating timezone (e.g., `America/New_York`, `Europe/London`, `Asia/Tokyo`) with instant preview of timezone offset.
-   - Real-time calculation of Sun, Moon, and Rising (Ascendant) signs. If birth time is unknown, a simple "Time Unknown" toggle activates the Sun-sign primary mode.
-   - Selection of personal priority categories (Career, Finance, Social, Creativity, Wellness, Rest).
-
-2. **Daily Personal Dashboard**:
-   - **Current Cosmic Pulse**: Today's composite energy score, primary planetary transit highlights (e.g., *Moon sextile Mercury*, *Mars entering 10th House*), active timezone badge (e.g., `EDT · UTC-4`), and dominant sign focus (Rising sign badge).
-   - **Personalized Activity Schedule**: Timed blocks localized to the user's minute, indicating peak windows for *New Project Launches*, *Socializing vs. Deep Hobbies*, *Optimal Rest*, and highlighted *Financial Caution Windows* (e.g., void-of-course moon alerts) with clear start and end times in local time.
-   - **Source Breakdown Drawer**: Drill-down view showing which specific sources contributed to today's reading with source-specific publication timezones and conversion history.
-
-3. **Energy Level Map (Weekly Wave Chart & Heatmap Matrix)**:
-   - **Interactive Wave Chart**: Canvas/SVG spline wave representing the 7-day trajectory of 6 parameters (Mental, Physical, Emotional, Creative, Social, Financial Risk) calibrated to the user's local day-night cycles.
-   - **Transit Heatmap Matrix**: 7-day $\times$ 24-hour visual matrix color-coded by vitality and friction in the user's local hours (00:00 to 23:00), allowing users to pinpoint optimal work and rest blocks.
-
-4. **Source Management & Community Submissions**:
-   - Directory of active crawled sources with category tags and declared publication timezones.
-   - Toggle sources on/off to customize personal report synthesis and adjust source weights (1x, 1.5x, 2x).
-   - "Suggest a Source" modal enabling users to submit new URLs, RSS feeds, or YouTube channel links with category tagging, language, and primary timezone.
-
-5. **PWA & Offline Experience**:
-   - In-app install banner with frictionless one-tap install for desktop/Android and guided step-by-step instructions for iOS Safari.
-   - Full offline caching using local astronomical algorithms and precached ephemeris tables so users can access their dashboard, energy maps, and localized transit calculations without internet.
-
-### Visual Identity & Theme
-
-- **Aesthetic Direction**: Deep Celestial Editorial. Elegant, atmospheric dark mode evoking a starlit night sky with luminous nebula gradients, crisp typography, and disciplined hairline borders.
-- **Color Palette & Mood**:
-  - *Dominant Canvas (60%)*: Deep Void Slate (`#080B14`, `#0D111F`)
-  - *Structural Surfaces (30%)*: Obsidian Cards (`#131B2E`) with subtle borders (`rgba(255, 255, 255, 0.08)`) and starlight separators
-  - *Luminous Nebula Accents (10%)*:
-    - Stellar Amber / Sun Gold (`#F59E0B` / `#FBBF24`) - Vitality & Career
-    - Astral Violet / Mystic Purple (`#8B5CF6` / `#A78BFA`) - Intuition, Moon & Ascendant
-    - Nebula Rose / Crimson (`#F43F5E`) - Financial Cautions & Friction Alerts
-    - Cosmic Cyan (`#06B6D4`) - Mental Focus & Communication
-    - Emerald Aurora (`#10B981`) - Physical Wellness & Harmony
-- **Typography & Hierarchy**:
-  - *Display / Headers*: `Outfit` / `Plus Jakarta Sans` with tracking-wide styling and celestial glyph accents.
-  - *Body Prose*: `DM Sans` (15px/16px, line-height 1.6) for effortless readability.
-  - *Data & Energy Metrics*: `JetBrains Mono` / tabular numerals (`tabular-nums`) for exact timestamps, planetary degrees, and energy indexes.
-- **Zero-Pill Discipline**: Metadata (signs, houses, sources, dates, timezones) rendered as clean unboxed text separated by subtle middots (`·`) or slashes. No garish badge clusters.
+**What they get each month:**
+- the important events of the month, with dates
+- when it is a good time to do specific things, per life area
+- when to be careful
+- a visual month view, and optionally the same content as calendar entries
 
 ---
 
-## 3. Key Product Decisions & Trade-Offs
+## 2. Core features
 
-- **Decision 1: Universal UTC Normalization Pipeline with Local Projection**
-  - *Chosen Approach*: When aggregating horoscopes from diverse publications (e.g., New York, London, Tokyo, Sydney), the system records the source's native timezone and converts all transit events, aspects, and activity suggestions into standard UTC. Upon rendering on the user's dashboard, the calendar engine projects these UTC timestamps into the user's detected or chosen local timezone.
-  - *Why*: Eliminates confusing date shifts and off-by-one errors where a user in Los Angeles reads an Australian astrologer's forecast for tomorrow morning without realizing the planetary transit is peaking tonight.
-- **Decision 2: Dual-Timezone User Profile (Birth vs. Operating)**
-  - *Chosen Approach*: The profile explicitly tracks both `birthTimezone` (used for calculating the exact Rising sign and house cusps based on natal planetary positions) and `operatingTimezone` (used for today's daily activity calendar and local 24-hour wave/heatmap).
-  - *Why*: Ensures astronomical accuracy for natal charts even if the user has relocated across the globe.
-- **Decision 3: Rising Sign Priority Engine with Sun Sign Fallback**
-  - *Chosen Approach*: If birth time is provided, the Ascendant (Rising sign) establishes the 12-house framework and transit timings. If birth time is unavailable, the user's Sun sign serves as the chart ruler (Solar House system).
-  - *Why*: Delivers astrologically sound personal horoscopes while maintaining zero-barrier onboarding for users who don't know their exact birth minute.
-- **Decision 4: Dual Synthesis (Serverless Ephemeris + Gemini Multi-Source Extractor)**
-  - *Chosen Approach*: Core planetary positions, aspects, lunar phases, and baseline energy curves are calculated client-side via a deterministic astronomical transit engine (ensuring 100% offline capability and zero latency). When connected, an Express server endpoint powered by Gemini (`gemini-3.8-flash`) synthesizes text from diverse active horoscope columns and categorizes activities into actionable time blocks.
-  - *Why*: Guarantees instant load times and offline PWA compliance while providing rich, nuanced editorial insights from multiple real-world horoscope perspectives.
-- **Decision 5: Client-authoritative Persistence with LocalStorage & PWA Service Worker**
-  - *Chosen Approach*: User profile, custom source selections, suggested sources, and activity preferences are saved locally in structured storage, combined with `vite-plugin-pwa` for standalone home-screen installation and offline asset caching.
-  - *Why*: Maximizes privacy (user birth data remains on their device), eliminates server database dependencies, and fulfills the "serverless if possible" requirement.
+### F1. Personal profile and chart derivation
+
+**Birth data**
+- Name (optional, a nickname is fine)
+- Birth date
+- Birth time, or "unknown"
+- Birth place: city search that resolves to latitude, longitude and IANA timezone automatically
+- Current timezone: auto-detected, can be overridden
+
+**Derived "Big Three"**, computed on the server (`POST /api/chart`) with Skyfield:
+- Sun and Moon sign from ecliptic longitude at the UTC birth instant.
+- Rising sign (Ascendant) from local sidereal time and birth latitude, only when the birth time is known.
+- Fallback: the Rising sign drives interpretation. If it is unknown, the Sun sign is used (solar houses) and the UI says so.
+- Moon-sign uncertainty is flagged when the birth time is unknown and the Moon changed sign that day.
+- The result is cached on the device. Viewing works offline; recalculating needs a connection.
+
+**Life context** (all optional, used only to personalise the interpretation)
+- Relationship: single / dating / in a relationship / married / separated / it's complicated, plus a "looking for a partner" flag.
+- Work: employed / looking for a job / considering a change / self-employed / student / parental leave / retired.
+- Family: has kids (count and age bands), expecting, caring for parents, living situation.
+- Money focus: saving / big purchase / investing / debt / none.
+- Health and wellbeing focus: fitness, sleep, stress, a specific habit.
+- Current goals (free text, length-bounded).
+- Known upcoming events this month (interview, move, wedding, trip) with dates.
+
+**Focus selection:** the user picks and ranks the life areas (F3) they care about this month.
+
+**Privacy rules**
+- The profile stays on the device and is sent to the backend only for chart calculation and forecast generation.
+- Identifying data (name, birth date, time, place) never goes into web search queries.
+- The LLM receives life context as untrusted data, never as instructions.
+
+### F2. Astrology sources
+
+**Curated default list** (a maintained data file on the server): name, domain, type (column / blog / video / podcast), language, cadence, and the sign-page URL pattern if known.
+
+**User sources:** add a site, domain or URL; enable, disable or remove it. Only http(s), deduplicated by domain.
+
+**Retrieval logic**
+1. The user has active sources: **exclusive** mode. Tavily `include_domains` is set to the user's domains only.
+2. Otherwise: search the curated domains. If that returns too few dated, month-specific results, fall back to open web search.
+3. Exclusive mode with no usable evidence: show an evidence-gap message with a one-click "also use default sources" retry. The search is never broadened silently.
+
+Every event cites at least one retrieved URL (the existing guarantee stays). Per-source agreement is shown in the event detail.
+
+### F3. Life areas
+
+One taxonomy, used for profile focus, LLM tagging, map rows, filters and calendar export. It replaces both `ActivityCategory` and `LifePriority`.
+
+| Life area | Houses | Examples of "good time to…" and cautions |
+|---|---|---|
+| Career & Work | 10, 6 | apply for jobs, pitch, ask for a raise, start a project |
+| Money & Resources | 2, 8 | big purchases, investing, budgeting; caution on impulse spending |
+| Love & Relationships | 5, 7 | dates, important conversations, commitments |
+| Family & Home | 4 (+5 for kids) | family time, moving, home projects, parenting focus |
+| Health & Wellbeing | 6, 1 | start a routine, check-ups, recovery |
+| Friends & Community | 11 | networking, events, asking for help |
+| Communication & Contracts | 3 (+ Mercury) | signing, negotiating, key emails; Mercury retrograde cautions |
+| Learning & Travel | 9 | courses, exams, trips |
+| Creativity & Fun | 5 | hobbies, creative launches, play |
+| Rest & Inner Life | 12, 8 | rest windows, reflection, letting go |
+
+**Event types**
+- Key date
+- Good time to…
+- Be careful
+- Sky event (from the ephemeris, Phase 4)
+
+Life context boosts relevance. For example, "looking for a job" ranks Career events higher and phrases them as job-search actions; "has kids" adds a parenting angle to Family & Home.
+
+### F4. Monthly output
+
+**Month overview:** theme, the top 3 to 5 key dates, and an evidence / uncertainty note.
+
+**Views**
+- Calendar month grid, filterable by life area.
+- Life-area × day map (an evolution of the existing heatmap).
+- "Good time to…" list grouped by life area, with date windows.
+- Event detail: dates, the transit, a personal note tying it to the user's situation, and sources.
+
+**Export**
+- Full-month `.ics`.
+- Per-event `.ics` ("Add to calendar").
+- Filtered by life area.
+- Optional reminder (`VALARM`) the day before.
+- Generated deterministically on the server, never by the LLM.
+
+The month picker defaults to the current or next month.
+
+### F5. Real sky layer (later)
+
+The server computes the month's sky events with Skyfield: new and full moons, sign ingresses, retrograde stations, void-of-course Moon.
+
+Uses:
+- cross-check the dates the LLM returns
+- add "Sky event" items
+- rebuild the weekly energy chart and hourly view on real transits
+
+### F6. Accounts (later)
+
+Login, server-side encrypted profiles, multi-device sync, forecast history.
 
 ---
 
-## 4. Technical Architecture & Data Strategy
+## 3. Architecture (target)
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                          BROWSER / PWA CLIENT                          │
-│                                                                        │
-│  ┌───────────────────┐  ┌────────────────────┐  ┌───────────────────┐  │
-│  │  Top Nav Bar      │  │  Active Profile    │  │ PWA Install /     │  │
-│  │  · Date Selector  │  │  · Rising / Sun    │  │ Offline Status    │  │
-│  │  · Sign Glyphs    │  │  · Timezone Pill   │  │ Indicator          │  │
-│  └─────────┬─────────┘  └──────────┬─────────┘  └─────────┬─────────┘  │
-│            │                       │                      │            │
-│  ┌─────────▼───────────────────────▼──────────────────────▼──────────┐ │
-│  │                        VIEWPORT VIEWS                             │ │
-│  │                                                                   │ │
-│  │  [ Dashboard View ]   [ Energy Map View ]   [ Sources View ]      │ │
-│  │  - Localized Schedule - 6-Parameter Wave    - Active Feeds & TZs  │ │
-│  │  - Transit summary    - Weekly Heatmap      - Source Weights      │ │
-│  │  - Financial Cautions - Transit Inspector   - "Suggest Source"    │ │
-│  └─────────────────────────────────┬─────────────────────────────────┘ │
-│                                    │                                   │
-│  ┌─────────────────────────────────▼─────────────────────────────────┐ │
-│  │             LOCAL ASTRONOMY & TIMEZONE ENGINE                     │ │
-│  │  - UTC Normalization & Local Timezone Projection Pipeline         │ │
-│  │  - Ephemeris & Transit Math (Sun, Moon, Planets, Aspects)         │ │
-│  │  - Rising Sign / House Cusp Calculator                            │ │
-│  │  - Energy Parameter Vector Evaluator (6 dimensions)               │ │
-│  │  - LocalStorage State Manager (profile, sources, suggestions)     │ │
-│  └─────────────────────────────────┬─────────────────────────────────┘ │
-└────────────────────────────────────┼───────────────────────────────────┘
-                                     │ (When online: /api/horoscope/synthesize)
-┌────────────────────────────────────▼───────────────────────────────────┐
-│                    NODE.JS / EXPRESS SERVER PROXY                      │
-│                                                                        │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │  /api/horoscope/synthesize (POST)                                │  │
-│  │  - Ingests active source texts with declared source timezones    │  │
-│  │  - Normalizes transit timings to UTC timestamps                  │  │
-│  │  - Calls Gemini API (`gemini-3.8-flash`) with structured schema  │  │
-│  │  - Extracts categorized activities, sentiment, & caution windows  │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                  BROWSER / PWA (React + Vite)                │
+│  Profile & life context · Sources · Month map · Calendar     │
+│  Local storage: profile, sources, cached chart, forecasts    │
+└───────────────────────────────┬──────────────────────────────┘
+                                │  /api  (JSON + SSE)
+┌───────────────────────────────▼──────────────────────────────┐
+│                  PYTHON BACKEND (FastAPI)                    │
+│  POST /api/chart                 Skyfield: Sun, Moon, Rising │
+│  POST /api/profiles              until accounts exist        │
+│  POST /api/horoscope/synthesize  forecast pipeline           │
+│  GET  /api/sources/curated       default source list         │
+└──────────────┬───────────────────────────────┬───────────────┘
+               │                               │
+        Nebius (LLM)                     Tavily (search)
 ```
 
-### Data Model & State Entities
+**Frontend**
+- React + Vite PWA (stack unchanged).
+- Profile and sources in local storage; renders the map and calendar; downloads `.ics`.
+- TypeScript types generated from the backend OpenAPI schema (for example `openapi-typescript`).
 
-- **UserProfile**:
-  - `name`: string
-  - `birthDate`: string (`YYYY-MM-DD`)
-  - `birthTime`?: string (`HH:mm`)
-  - `birthLocation`: string
-  - `birthTimezone`: string (e.g. `'America/Chicago'`)
-  - `operatingTimezone`: string (e.g. `'Europe/London'`)
-  - `sunSign`: ZodiacSign
-  - `moonSign`: ZodiacSign
-  - `risingSign`?: ZodiacSign
-  - `hasExactTime`: boolean
-  - `activeCategories`: ActivityCategory[] (`career`, `finance`, `social`, `hobbies`, `wellness`, `rest`, `strategic`)
-- **HoroscopeSource**:
-  - `id`: string
-  - `name`: string
-  - `type`: `'newspaper' | 'blog' | 'video' | 'column'`
-  - `author`: string
-  - `sourceTimezone`: string (e.g. `'America/New_York'`)
-  - `url`: string
-  - `weight`: number (0.5 to 2.0)
-  - `isActive`: boolean
-  - `sampleExtract`: string
-  - `lastCrawled`: string (ISO-8601 UTC)
-- **ScheduledActivity**:
-  - `id`: string
-  - `category`: ActivityCategory
-  - `title`: string
-  - `description`: string
-  - `utcStartTime`: string (ISO-8601)
-  - `utcEndTime`: string (ISO-8601)
-  - `localTimeWindow`: string (formatted for user's operating timezone, e.g. "14:00 - 16:30 EDT")
-  - `significance`: `'favorable' | 'neutral' | 'caution'`
-  - `cosmicReason`: string
-  - `energyType`: 'mental' | 'physical' | 'emotional' | 'creative' | 'social' | 'financialRisk'
-- **EnergyMapData**: 7 days of 24-hour timestamps, each containing scores (0-100) for all 6 dimensions aligned to the user's local operating hours.
-- **SourceSuggestion**: `id`, `title`, `url`, `type`, `sourceTimezone`, `description`, `submittedAt`, `status`.
+**Backend**
+- Python 3.12+, FastAPI + Uvicorn, Pydantic v2 models.
+- httpx (async) for Nebius and Tavily.
+- SSE via `sse-starlette`, with the same `progress` / `result` / `error` events as today.
+- Skyfield for the ephemeris.
+- ICS generation: a port of `ics.ts`, or the `icalendar` library.
+- Tests: pytest + respx. Tooling: uv, ruff, mypy or pyright.
 
-### Interactive Component & State Mapping
+**Forecast pipeline**
+1. Validate the profile (including life context) and the source configuration.
+2. Query agent: 1 to 3 search queries (sign, month and year, focus areas; no personal data).
+3. Tavily search using the F2 domain rules.
+4. Forecast agent: events tagged with life areas, event type and a personal note.
+5. Strict validation: dates within the month, citations limited to retrieved URLs, allowed enum values.
+6. Deterministic `.ics`.
 
-- **Timezone Selector & Indicator**: Prominently mounted in the header, showing the user's active timezone with a 1-click modal to switch between Auto-Detected device time and manual custom timezones, with instant re-projection of the entire activity schedule.
-- **Profile Bar & Sign Toggle**: Allows switching between Rising-Sign-First mode and Sun-Sign mode with instant recalculation of all activity recommendations and house alignments.
-- **Wave Chart Filter Controls**: Buttons for toggling individual energy parameters on/off, adjusting smoothing curves, and hovering to highlight exact transit influences in local time.
-- **Activity Scheduler List**: Filterable by category tabs (All, Projects & Career, Social & Hobbies, Financial Cautions, Wellness & Rest). Each item includes local timing, transit rationale, and actionable guidance.
-- **Source Configurator Modal & Suggestion Form**: Allows enabling/disabling sources, fine-tuning their influence on the aggregated energy score, viewing each source's native timezone, and submitting new sources with immediate local feedback.
-- **PWA Service Worker & Install Component**: Captures `beforeinstallprompt`, renders the in-app install button on Android/Chrome/Desktop, provides custom iOS Safari step-by-step instructions, and triggers an offline banner when network drops.
+**Running it**
+- Development: the Vite dev server proxies `/api` to FastAPI (two processes).
+- Production: FastAPI serves the built `dist/` (single service), or static hosting is separate.
+
+**Security carried over from the current server**
+- Host and origin checks, made configurable for deployment.
+- Body size limits.
+- Request timeout and cancellation on client disconnect.
+- Secrets only via environment variables.
 
 ---
+
+## 4. Data model (target, summary)
+
+- **UserProfile**
+  - `birth`: `{ date, time?, timeKnown, place { label, lat, lon, tz } }`
+  - `currentTimezone`
+  - `chart`: `{ sun, moon, rising?, moonUncertain }`
+  - `lifeContext`: `{ relationship, lookingForPartner, work, kids, family, moneyFocus, healthFocus, goals, upcomingEvents[] }`
+  - `focusAreas`: `LifeArea[]`
+- **Source**: `id`, `name`, `domain` / `url`, `type`, `language`, `origin` (`'curated' | 'user'`), `active`
+- **ForecastEvent**: `date`, `endDate?`, `title`, `type`, `lifeAreas[]`, `summary`, `personalNote`, `sourceUrls[]`
+- **MonthlyForecast**: `month`, `theme`, `keyDates[]`, `events[]`, `evidenceNote`, `generatedAt`
+
+---
+
+## 5. Roadmap
+
+### Phase 0: Python backend and cleanup (done)
+- Port `server.ts`, the validation and the ICS generation to FastAPI 1:1 (same API contract, same SSE events).
+- Port the 32 tests to pytest.
+- Add the Vite proxy; remove the Express / tsx server code.
+- Unify naming (Moroscope vs CelestialPulse vs `react-example`).
+- Remove Gemini leftovers.
+- Keep a single lockfile.
+- Make the default month dynamic.
+- Split `App.tsx`.
+- Hide the fake energy charts.
+
+Notes from the port: validation is still hand-written (a 1:1 port of the TypeScript checks), and SSE uses Starlette's `StreamingResponse` instead of `sse-starlette`. Pydantic models and generated TypeScript types are deferred to Phase 3, when the data model changes.
+
+### Phase 1: Profile and real chart
+- Birth-place search and geocoding.
+- `/api/chart` with Skyfield.
+- Life-context form.
+- Onboarding flow.
+
+### Phase 2: Sources
+- Curated list.
+- User sources (exclusive mode).
+- `include_domains` retrieval, fallback, and the evidence-gap retry.
+
+### Phase 3: Life areas and monthly output
+- Taxonomy end to end (Pydantic models, prompts, TypeScript types).
+- Calendar grid and "Good time to…" list.
+- Personal notes.
+- Per-event and filtered `.ics`.
+
+### Phase 4: Real sky layer
+- Sky events, cross-checking, rebuilt energy charts.
+
+### Phase 5: Accounts and deployment
+- Auth, database, configurable hosting.
+
+---
+
+## 6. Open questions
+
+- **Geocoding:** bundled city database (for example GeoNames) or an external geocoder (Nominatim); timezone from coordinates (`timezonefinder`).
+- **Ephemeris:** Skyfield or pyswisseph (higher precision, but AGPL or a commercial licence).
+- **Curated sources:** the initial list; English only at first?
+- **LLM privacy:** how much life context is sent to the LLM provider (consent toggle?).
+- **Hosting:** the Python hosting target.
+
+## 7. Non-goals (for now)
+
+- Full natal chart wheels and aspect grids
+- Direct calendar sync (OAuth)
+- Push notifications
+- Community source submissions

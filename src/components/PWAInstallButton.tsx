@@ -15,7 +15,7 @@ export const PWAInstallButton: React.FC = () => {
       <button
         onClick={install}
         className="min-h-[40px] px-3.5 py-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-200 text-xs font-medium flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-        title="Install CelestialPulse as a standalone PWA"
+        title="Install Moroscope as a standalone PWA"
       >
         <Download className="w-3.5 h-3.5 text-amber-300 shrink-0" />
         <span>Install App</span>
@@ -28,7 +28,7 @@ export const PWAInstallButton: React.FC = () => {
       <button
         onClick={() => setShowModal(true)}
         className="min-h-[40px] px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 text-slate-300 text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-        title="Install CelestialPulse on your device"
+        title="Install Moroscope on your device"
       >
         <Smartphone className="w-3.5 h-3.5 text-violet-400 shrink-0" />
         <span className="hidden sm:inline">{isIOS ? 'Install on iOS' : 'PWA Guide'}</span>
@@ -39,7 +39,7 @@ export const PWAInstallButton: React.FC = () => {
           <div className="w-full max-w-md rounded-2xl bg-[#10172A] border border-slate-800 p-6 shadow-2xl">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <h3 className="text-base font-semibold text-slate-100">
-                Install CelestialPulse PWA
+                Install Moroscope PWA
               </h3>
               <button
                 onClick={() => setShowModal(false)}
@@ -51,19 +51,19 @@ export const PWAInstallButton: React.FC = () => {
             </div>
             <div className="mt-4 space-y-3 text-sm text-slate-300 leading-relaxed">
               <p>
-                CelestialPulse is a Progressive Web App that caches the app shell and demo data for offline viewing; generated forecasts require a connection to the backend.
+                Moroscope is a Progressive Web App that caches the app shell and demo data for offline viewing; generated forecasts require a connection to the backend.
               </p>
               {isIOS ? (
                 <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2 text-xs">
                   <p className="font-medium text-amber-300">iPhone / iPad Installation:</p>
                   <p>1. Tap the <strong>Share</strong> button in your Safari toolbar.</p>
                   <p>2. Scroll down and select <strong>Add to Home Screen</strong>.</p>
-                  <p>3. Launch CelestialPulse directly from your home screen in standalone mode.</p>
+                  <p>3. Launch Moroscope directly from your home screen in standalone mode.</p>
                 </div>
               ) : (
                 <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2 text-xs">
                   <p className="font-medium text-amber-300">Desktop &amp; Android Installation:</p>
-                  <p>1. Click the <strong>Install</strong> icon in your browser&apos;s address bar (or open the browser menu and select <strong>Install CelestialPulse</strong>).</p>
+                  <p>1. Click the <strong>Install</strong> icon in your browser&apos;s address bar (or open the browser menu and select <strong>Install Moroscope</strong>).</p>
                   <p>2. If viewing inside an embedded preview frame, open the app in a dedicated browser tab to trigger one-click home screen installation.</p>
                 </div>
               )}
