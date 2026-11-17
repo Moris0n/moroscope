@@ -222,9 +222,9 @@ Login, server-side encrypted profiles, multi-device sync, forecast history.
 Notes from the port: validation is still hand-written (a 1:1 port of the TypeScript checks), and SSE uses Starlette's `StreamingResponse` instead of `sse-starlette`. Pydantic models and generated TypeScript types are deferred to Phase 3, when the data model changes.
 
 ### Phase 1: Profile and real chart
-- Birth-place search and geocoding.
-- `/api/chart` with Skyfield.
-- Life-context form.
+- Birth-place search and geocoding (done: bundled GeoNames city list, `GET /api/places`).
+- `/api/chart` with Skyfield (done; manual sign overrides are kept and marked in the UI).
+- Life-context form (stored on the device only; not sent to the LLM before Phase 3).
 - Onboarding flow.
 
 ### Phase 2: Sources
@@ -248,8 +248,8 @@ Notes from the port: validation is still hand-written (a 1:1 port of the TypeScr
 
 ## 6. Open questions
 
-- **Geocoding:** bundled city database (for example GeoNames) or an external geocoder (Nominatim); timezone from coordinates (`timezonefinder`).
-- **Ephemeris:** Skyfield or pyswisseph (higher precision, but AGPL or a commercial licence).
+- **Geocoding:** decided: bundled GeoNames city database (timezone included). Open: local-language city names and places under 15,000 people.
+- **Ephemeris:** decided: Skyfield with JPL DE421 (birth years 1900 to 2050).
 - **Curated sources:** the initial list; English only at first?
 - **LLM privacy:** how much life context is sent to the LLM provider (consent toggle?).
 - **Hosting:** the Python hosting target.

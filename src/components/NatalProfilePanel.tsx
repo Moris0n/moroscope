@@ -19,9 +19,6 @@ import {
   CATEGORY_METADATA,
   ZODIAC_METADATA,
   ZODIAC_SIGNS,
-  calculateMoonSign,
-  calculateRisingSign,
-  calculateSunSign,
   getEffectiveChartSign,
 } from '../utils/astrologyEngine';
 import {
@@ -29,6 +26,8 @@ import {
   detectLocalTimezone,
   formatTimezoneBadge,
 } from '../utils/timezoneEngine';
+import { ChartStatus } from '../hooks/useNatalChart';
+import { BirthPlaceSearch } from './BirthPlaceSearch';
 import {
   LIFE_PRIORITIES,
   PRIORITY_LABELS,
@@ -42,6 +41,7 @@ interface NatalProfilePanelProps {
   isSavingProfile: boolean;
   saveProfileStatus: string | null;
   backendUrlValid: boolean;
+  chartStatus: ChartStatus;
 }
 
 const ALL_CATEGORIES: ActivityCategory[] = [
@@ -62,6 +62,7 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
   isSavingProfile,
   saveProfileStatus,
   backendUrlValid,
+  chartStatus,
 }) => {
   const [showBackendSettings, setShowBackendSettings] = useState(false);
   const targetMonthValid = !!parseMonthRange(profile.targetMonth);
@@ -83,29 +84,42 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
     ? ZODIAC_METADATA[profile.risingSign]
     : undefined;
 
+  const chart = profile.chart;
+  const hasBirthCoordinates = profile.birthPlace?.tz === profile.birthTimezone;
+
+  // The signs themselves are recalculated on the server (useNatalChart) when birth data changes.
   const handleBirthChange = (
-    field: 'birthDate' | 'birthTime' | 'birthTimezone' | 'hasExactTime',
+    field: 'birthDate' | 'birthTime' | 'hasExactTime',
     value: string | boolean
   ) => {
     const next = { ...profile, [field]: value };
-    next.sunSign = calculateSunSign(next.birthDate);
-    next.moonSign = calculateMoonSign(
-      next.birthDate,
-      next.hasExactTime ? next.birthTime : '12:00',
-      next.birthTimezone
-    );
-    if (next.hasExactTime && next.birthTime) {
-      next.risingSign = calculateRisingSign(
-        next.birthDate,
-        next.birthTime,
-        next.birthTimezone
-      );
-      next.useRisingPrimary = true;
-    } else {
-      next.useRisingPrimary = false;
-    }
+    if (!next.hasExactTime) next.useRisingPrimary = false;
     onUpdateProfile(next);
   };
+
+  const overrideNote = (
+    current: ZodiacSign | undefined,
+    calculated: ZodiacSign | undefined,
+    useCalculated: (sign: ZodiacSign) => void
+  ) =>
+    chart && current && current !== calculated ? (
+      <p className="mt-1.5 text-[11px] text-amber-300">
+        Manually set.
+        {calculated && (
+          <>
+            {' '}
+            Calculated: {calculated}.{' '}
+            <button
+              type="button"
+              onClick={() => useCalculated(calculated)}
+              className="underline cursor-pointer"
+            >
+              Use calculated
+            </button>
+          </>
+        )}
+      </p>
+    ) : null;
 
   const toggleCategory = (cat: ActivityCategory) => {
     const exists = profile.activeCategories.includes(cat);
@@ -174,6 +188,27 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
           </div>
         </div>
 
+        <div className="mt-4 text-xs" role="status">
+          {chartStatus.state === 'loading' ? (
+            <span className="text-slate-400">Calculating your signs…</span>
+          ) : chartStatus.state === 'error' ? (
+            <span className="text-rose-300">
+              {chartStatus.error}{' '}
+              <button
+                type="button"
+                onClick={chartStatus.retry}
+                className="underline cursor-pointer"
+              >
+                Retry
+              </button>
+            </span>
+          ) : chart ? (
+            <span className="text-slate-500">
+              Signs are calculated from your birth data with an astronomical ephemeris.
+            </span>
+          ) : null}
+        </div>
+
         {/* 3-Column NatalPlacements */}
         <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-5">
           {/* Rising Sign / Ascendant (Primary if available) */}
@@ -196,38 +231,53 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
               </span>
             </div>
 
-            {profile.hasExactTime && risingMeta ? (
+            {profile.hasExactTime ? (
               <>
-                <div className="mt-2 flex items-baseline gap-2.5">
-                  <span className="text-3xl font-display text-amber-300">
-                    {risingMeta.glyph}
-                  </span>
-                  <span className="text-xl font-bold text-slate-100">
-                    {risingMeta.sign}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-slate-400">
-                  {risingMeta.element} · {risingMeta.modality} · Ruled by {risingMeta.ruler}
-                </p>
-                <p className="mt-2 text-xs text-slate-300">
-                  {risingMeta.keywords}
-                </p>
+                {risingMeta ? (
+                  <>
+                    <div className="mt-2 flex items-baseline gap-2.5">
+                      <span className="text-3xl font-display text-amber-300">
+                        {risingMeta.glyph}
+                      </span>
+                      <span className="text-xl font-bold text-slate-100">
+                        {risingMeta.sign}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {risingMeta.element} · {risingMeta.modality} · Ruled by {risingMeta.ruler}
+                    </p>
+                    <p className="mt-2 text-xs text-slate-300">
+                      {risingMeta.keywords}
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-3 text-xs text-slate-400 leading-relaxed">
+                    Choose your birth place below to calculate your Rising sign, or set it manually.
+                  </p>
+                )}
+                {overrideNote(profile.risingSign, chart?.rising, (sign) =>
+                  onUpdateProfile({ ...profile, risingSign: sign, useRisingPrimary: true })
+                )}
                 <div className="mt-3 pt-3 border-t border-slate-800/80">
                   <label className="block text-[11px] text-slate-400 mb-1">
                     Manual Ascendant Override:
                   </label>
                   <select
-                    value={profile.risingSign || profile.sunSign}
+                    value={profile.risingSign || ''}
                     onChange={(e) =>
                       onUpdateProfile({
                         ...profile,
                         risingSign: e.target.value as ZodiacSign,
-                        hasExactTime: true,
                         useRisingPrimary: true,
                       })
                     }
                     className="w-full h-9 px-2.5 rounded-lg bg-[#10172A] border border-slate-700 text-xs text-slate-200"
                   >
+                    {!profile.risingSign && (
+                      <option value="" disabled>
+                        Not set
+                      </option>
+                    )}
                     {ZODIAC_SIGNS.map((s) => (
                       <option key={s} value={s}>
                         {ZODIAC_METADATA[s].glyph} {s} Rising
@@ -283,6 +333,14 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
               {sunMeta.element} · {sunMeta.modality} · Ruled by {sunMeta.ruler}
             </p>
             <p className="mt-2 text-xs text-slate-300">{sunMeta.keywords}</p>
+            {chart?.sunUncertain && profile.sunSign === chart.sun && (
+              <p className="mt-1.5 text-[11px] text-amber-300">
+                The Sun changed sign on your birth day. Add your birth time to be sure.
+              </p>
+            )}
+            {overrideNote(profile.sunSign, chart?.sun, (sign) =>
+              onUpdateProfile({ ...profile, sunSign: sign })
+            )}
             <div className="mt-3 pt-3 border-t border-slate-800/80">
               <label className="block text-[11px] text-slate-400 mb-1">
                 Manual Sun Sign Override:
@@ -327,6 +385,14 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
               {moonMeta.element} · {moonMeta.modality} · Ruled by {moonMeta.ruler}
             </p>
             <p className="mt-2 text-xs text-slate-300">{moonMeta.keywords}</p>
+            {chart?.moonUncertain && profile.moonSign === chart.moon && (
+              <p className="mt-1.5 text-[11px] text-amber-300">
+                The Moon changed sign on your birth day. Add your birth time to be sure.
+              </p>
+            )}
+            {overrideNote(profile.moonSign, chart?.moon, (sign) =>
+              onUpdateProfile({ ...profile, moonSign: sign })
+            )}
             <div className="mt-3 pt-3 border-t border-slate-800/80">
               <label className="block text-[11px] text-slate-400 mb-1">
                 Manual Moon Sign Override:
@@ -410,21 +476,30 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
 
           <div>
             <label className="block text-xs font-medium text-slate-300 mb-1.5">
-              Birth Location Timezone
+              Birth Place (For Rising Sign &amp; Timezone)
             </label>
-            <select
-              value={profile.birthTimezone}
-              onChange={(e) =>
-                handleBirthChange('birthTimezone', e.target.value)
+            <BirthPlaceSearch
+              value={profile.birthLocation}
+              backendUrl={profile.backendUrl}
+              onSelect={(place) =>
+                onUpdateProfile({
+                  ...profile,
+                  birthPlace: place,
+                  birthLocation: place.label,
+                  birthTimezone: place.tz,
+                })
               }
-              className="w-full h-11 px-3 rounded-xl bg-[#080B14] border border-slate-800 text-xs text-slate-100 font-mono focus:outline-none focus:border-amber-400"
-            >
-              {TIMEZONE_OPTIONS.map((tz) => (
-                <option key={tz.id} value={tz.id}>
-                  {tz.city} ({tz.id})
-                </option>
-              ))}
-            </select>
+            />
+            {hasBirthCoordinates ? (
+              <p className="mt-1 text-[11px] text-slate-500 font-mono">
+                {profile.birthTimezone}
+              </p>
+            ) : (
+              <p className="mt-1 text-[11px] text-amber-300">
+                Pick a city from the list to calculate your Rising sign. Timezone in use:{' '}
+                <span className="font-mono">{profile.birthTimezone}</span>
+              </p>
+            )}
           </div>
         </div>
 

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import calendar
 import json
+import math
 import re
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from typing import Any
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
@@ -67,22 +68,24 @@ MONTH_NAMES = [
     "December",
 ]
 
-ZODIAC_SIGNS = frozenset(
-    [
-        "Aries",
-        "Taurus",
-        "Gemini",
-        "Cancer",
-        "Leo",
-        "Virgo",
-        "Libra",
-        "Scorpio",
-        "Sagittarius",
-        "Capricorn",
-        "Aquarius",
-        "Pisces",
-    ]
+ZODIAC_ORDER = (
+    "Aries",
+    "Taurus",
+    "Gemini",
+    "Cancer",
+    "Leo",
+    "Virgo",
+    "Libra",
+    "Scorpio",
+    "Sagittarius",
+    "Capricorn",
+    "Aquarius",
+    "Pisces",
 )
+ZODIAC_SIGNS = frozenset(ZODIAC_ORDER)
+
+MIN_BIRTH_YEAR = 1900
+MAX_BIRTH_YEAR = 2050
 
 _PRIORITY_SET = frozenset(LIFE_PRIORITIES)
 _IMPACT_SET = frozenset(IMPACT_TYPES)
@@ -444,3 +447,63 @@ def validate_agent_query(payload: Any) -> str | None:
     if not _bounded_text(query, MAX_QUERY_LENGTH):
         return None
     return query.strip()
+
+
+@dataclass(frozen=True)
+class ChartRequest:
+    birth_date: date
+    birth_time: time | None
+    timezone: str
+    latitude: float | None
+    longitude: float | None
+
+
+def _coordinate(value: Any, limit: float) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value) if math.isfinite(value) and abs(value) <= limit else None
+
+
+def validate_chart_request(body: Any) -> tuple[list[str], ChartRequest | None]:
+    """Validate a /api/chart body. Returns (errors, request); request is None on errors."""
+    if not isinstance(body, dict):
+        return ["body must be an object"], None
+    errors: list[str] = []
+
+    birth_date = parse_iso_date(body.get("birthDate"))
+    if not birth_date:
+        errors.append("birthDate must be a real YYYY-MM-DD date")
+    elif not MIN_BIRTH_YEAR <= birth_date.year <= MAX_BIRTH_YEAR:
+        errors.append(f"birthDate must be between {MIN_BIRTH_YEAR} and {MAX_BIRTH_YEAR}")
+
+    time_known = body.get("timeKnown")
+    birth_time: time | None = None
+    if not isinstance(time_known, bool):
+        errors.append("timeKnown must be a boolean")
+    elif time_known:
+        if is_valid_birth_time(body.get("birthTime")):
+            hours, minutes = body["birthTime"].split(":")
+            birth_time = time(int(hours), int(minutes))
+        else:
+            errors.append("birthTime must be a valid HH:mm time")
+
+    place = body.get("place")
+    latitude = longitude = None
+    if not isinstance(place, dict):
+        errors.append("place must be an object")
+    else:
+        if not is_valid_time_zone(place.get("tz")):
+            errors.append("place.tz must be a valid IANA timezone")
+        has_lat, has_lon = place.get("lat") is not None, place.get("lon") is not None
+        if has_lat != has_lon:
+            errors.append("place.lat and place.lon must be given together")
+        elif has_lat:
+            latitude, longitude = _coordinate(place["lat"], 90), _coordinate(place["lon"], 180)
+            if latitude is None:
+                errors.append("place.lat must be a number between -90 and 90")
+            if longitude is None:
+                errors.append("place.lon must be a number between -180 and 180")
+
+    if errors or birth_date is None:
+        return errors, None
+    return [], ChartRequest(birth_date, birth_time, place["tz"], latitude, longitude)

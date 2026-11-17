@@ -1,4 +1,4 @@
-"""FastAPI application: profile storage and the forecast endpoint (JSON or SSE)."""
+"""FastAPI application: profiles, chart, place search and the forecast endpoint (JSON or SSE)."""
 
 from __future__ import annotations
 
@@ -17,9 +17,17 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from .chart import ChartCalculator
 from .config import PipelineError, load_allowed_hosts
 from .pipeline import PipelineDeps, run_forecast_pipeline, save_profile_snapshot
-from .validation import MAX_EXCERPT_LENGTH, is_utf8_safe, is_uuid, validate_user_profile
+from .places import search_places
+from .validation import (
+    MAX_EXCERPT_LENGTH,
+    is_utf8_safe,
+    is_uuid,
+    validate_chart_request,
+    validate_user_profile,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MAX_BODY_BYTES = 2 * 1024 * 1024
@@ -115,9 +123,29 @@ def _sse(event: str, data: Any) -> str:
     return f"event: {event}\ndata: {payload}\n\n"
 
 
-def create_app(deps: PipelineDeps, static_dir: Path | None = None) -> FastAPI:
+def create_app(
+    deps: PipelineDeps, static_dir: Path | None = None, chart: ChartCalculator | None = None
+) -> FastAPI:
     app = FastAPI(title="Moroscope API", docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(HostGuardMiddleware, deps=deps)
+    calculator = chart or ChartCalculator()
+
+    @app.get("/api/places")
+    async def places(q: str = "") -> Response:
+        return JSONResponse({"results": await asyncio.to_thread(search_places, q)})
+
+    @app.post("/api/chart")
+    async def compute_chart(request: Request) -> Response:
+        body = await _read_json_body(request)
+        if isinstance(body, JSONResponse):
+            return body
+        errors, chart_request = validate_chart_request(body)
+        if errors or chart_request is None:
+            return _error(400, "; ".join(errors))
+        try:
+            return JSONResponse(await asyncio.to_thread(calculator.compute, chart_request))
+        except PipelineError as exc:
+            return _error(exc.status, exc.message)
 
     @app.post("/api/profiles")
     async def save_profile(request: Request) -> Response:

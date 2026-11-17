@@ -13,6 +13,7 @@ import {
   buildMonthlyHeatmap,
   readForecastSseStream,
 } from '../src/utils/forecastHelpers.ts';
+import { applyChart, chartBasis } from '../src/utils/chart.ts';
 import { TransitEvent, UserProfile } from '../src/types/astrology.ts';
 
 const VALID_PROFILE: UserProfile = {
@@ -244,4 +245,97 @@ test('defaultTargetMonth follows the current date and always parses', () => {
   assert.equal(defaultTargetMonth(new Date(2027, 0, 31)), 'January 2027');
   assert.equal(defaultTargetMonth(new Date(2026, 11, 1)), 'December 2026');
   assert.ok(parseMonthRange(defaultTargetMonth()));
+});
+
+test('chartBasis is the chart request body and changes only with birth data', () => {
+  const place = { label: 'New York City', lat: 40.7143, lon: -74.006, tz: 'America/New_York' };
+  const withPlace = { ...VALID_PROFILE, birthPlace: place };
+  assert.deepEqual(JSON.parse(chartBasis(withPlace)!), {
+    birthDate: '1994-10-17',
+    birthTime: '08:45',
+    timeKnown: true,
+    place: { tz: 'America/New_York', lat: 40.7143, lon: -74.006 },
+  });
+  assert.deepEqual(JSON.parse(chartBasis(VALID_PROFILE)!).place, { tz: 'America/New_York' });
+  assert.deepEqual(
+    JSON.parse(chartBasis({ ...withPlace, hasExactTime: false })!),
+    {
+      birthDate: '1994-10-17',
+      timeKnown: false,
+      place: { tz: 'America/New_York', lat: 40.7143, lon: -74.006 },
+    }
+  );
+  // Coordinates are dropped when they belong to a different timezone than the one in use.
+  assert.deepEqual(
+    JSON.parse(chartBasis({ ...withPlace, birthTimezone: 'Europe/London' })!).place,
+    { tz: 'Europe/London' }
+  );
+
+  assert.equal(chartBasis({ ...withPlace, name: 'Other', sunSign: 'Leo' }), chartBasis(withPlace));
+  assert.notEqual(chartBasis({ ...withPlace, birthTime: '09:00' }), chartBasis(withPlace));
+
+  assert.equal(chartBasis({ ...VALID_PROFILE, birthDate: '' }), null);
+  assert.equal(chartBasis({ ...VALID_PROFILE, birthDate: '1850-01-01' }), null);
+  assert.equal(chartBasis({ ...VALID_PROFILE, birthTime: '' }), null);
+  assert.notEqual(chartBasis({ ...VALID_PROFILE, birthTime: '', hasExactTime: false }), null);
+});
+
+test('applyChart replaces the signs and decides whether the Rising sign leads', () => {
+  const chart = {
+    sun: 'Libra',
+    moon: 'Aries',
+    rising: 'Scorpio',
+    sunUncertain: false,
+    moonUncertain: false,
+  } as const;
+  const overridden: UserProfile = { ...VALID_PROFILE, sunSign: 'Leo', useRisingPrimary: false };
+  const applied = applyChart(overridden, chart, 'basis-1');
+  assert.equal(applied.sunSign, 'Libra');
+  assert.equal(applied.moonSign, 'Aries');
+  assert.equal(applied.useRisingPrimary, false);
+  assert.deepEqual(applied.chart, { ...chart, basis: 'basis-1' });
+
+  const newlyRising = applyChart(
+    { ...VALID_PROFILE, risingSign: undefined, useRisingPrimary: false },
+    chart,
+    'b'
+  );
+  assert.equal(newlyRising.risingSign, 'Scorpio');
+  assert.equal(newlyRising.useRisingPrimary, true);
+
+  const { rising: _, ...withoutRising } = chart;
+  const noRising = applyChart(VALID_PROFILE, { ...withoutRising, moonUncertain: true }, 'b');
+  assert.equal(noRising.risingSign, undefined);
+  assert.equal(noRising.useRisingPrimary, false);
+  assert.equal(noRising.chart?.moonUncertain, true);
+});
+
+test('mergeProfileWithDefaults never pairs the default place or chart with saved birth data', () => {
+  const place = { label: 'New York City', lat: 40.7143, lon: -74.006, tz: 'America/New_York' };
+  const chart = {
+    sun: 'Libra',
+    moon: 'Aries',
+    sunUncertain: false,
+    moonUncertain: true,
+    basis: 'x',
+  } as const;
+  const defaults: UserProfile = { ...VALID_PROFILE, birthPlace: place, chart };
+
+  const legacy = mergeProfileWithDefaults(defaults, { name: 'Old User', birthDate: '1990-01-15' });
+  assert.equal(legacy.birthPlace, undefined);
+  assert.equal(legacy.chart, undefined);
+
+  const haifa = { label: 'Haifa, Israel', lat: 32.8156, lon: 34.9892, tz: 'Asia/Jerusalem' };
+  const kept = mergeProfileWithDefaults(defaults, { birthPlace: haifa, chart });
+  assert.deepEqual(kept.birthPlace, haifa);
+  assert.deepEqual(kept.chart, chart);
+
+  const corrupt = mergeProfileWithDefaults(defaults, {
+    birthPlace: { ...haifa, lat: 120 },
+    chart: { ...chart, sun: 'Ophiuchus' },
+  });
+  assert.equal(corrupt.birthPlace, undefined);
+  assert.equal(corrupt.chart, undefined);
+
+  assert.deepEqual(mergeProfileWithDefaults(defaults, null).birthPlace, place);
 });

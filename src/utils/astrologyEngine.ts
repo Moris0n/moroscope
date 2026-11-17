@@ -15,7 +15,6 @@ import {
   formatHourDecimal,
   formatTimezoneBadge,
   getTimezoneOffsetMinutes,
-  normalizeSourceHourToUtc,
 } from './timezoneEngine';
 
 export const ZODIAC_SIGNS: ZodiacSign[] = [
@@ -350,97 +349,6 @@ export const DEFAULT_SOURCES: HoroscopeSource[] = [
     lastCrawledUtc: '2026-10-17T01:00:00Z',
   },
 ];
-
-/**
- * Calculates Sun Sign from YYYY-MM-DD birth date.
- */
-export function calculateSunSign(birthDate: string): ZodiacSign {
-  const parts = birthDate.split('-').map(Number);
-  if (parts.length < 3 || isNaN(parts[1]) || isNaN(parts[2])) return 'Libra';
-  const month = parts[1];
-  const day = parts[2];
-
-  if ((month === 3 && day >= 21) || (month === 4 && day <= 19)) return 'Aries';
-  if ((month === 4 && day >= 20) || (month === 5 && day <= 20)) return 'Taurus';
-  if ((month === 5 && day >= 21) || (month === 6 && day <= 20)) return 'Gemini';
-  if ((month === 6 && day >= 21) || (month === 7 && day <= 22)) return 'Cancer';
-  if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) return 'Leo';
-  if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) return 'Virgo';
-  if ((month === 9 && day >= 23) || (month === 10 && day <= 22)) return 'Libra';
-  if ((month === 10 && day >= 23) || (month === 11 && day <= 21)) return 'Scorpio';
-  if ((month === 11 && day >= 22) || (month === 12 && day <= 21)) return 'Sagittarius';
-  if ((month === 12 && day >= 22) || (month === 1 && day <= 19)) return 'Capricorn';
-  if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return 'Aquarius';
-  return 'Pisces';
-}
-
-/**
- * Calculates approximate Lunar Sign using sidereal/tropical lunar period (27.321661 days)
- * normalized to UTC via the user's birthTimezone.
- */
-export function calculateMoonSign(
-  birthDate: string,
-  birthTime: string = '12:00',
-  birthTimezone: string = 'UTC'
-): ZodiacSign {
-  const [year, month, day] = birthDate.split('-').map(Number);
-  const [hour, minute] = (birthTime || '12:00').split(':').map(Number);
-  if (!year || !month || !day) return 'Taurus';
-
-  const localHourDecimal = (hour || 12) + (minute || 0) / 60;
-  const refDate = new Date(Date.UTC(year, month - 1, day, 12, 0));
-  const { utcHour, dayShiftFromSourceToUtc } = normalizeSourceHourToUtc(
-    localHourDecimal,
-    birthTimezone,
-    refDate
-  );
-
-  const utcTimestamp = Date.UTC(
-    year,
-    month - 1,
-    day + dayShiftFromSourceToUtc,
-    Math.floor(utcHour),
-    Math.round((utcHour % 1) * 60)
-  );
-
-  // Reference new moon / Aries 0 deg epoch: Jan 6, 2000 18:14 UTC
-  const epochMs = Date.UTC(2000, 0, 6, 18, 14, 0);
-  const daysSinceEpoch = (utcTimestamp - epochMs) / (1000 * 60 * 60 * 24);
-  const siderealPeriod = 27.321661;
-  const normalizedCycle = (((daysSinceEpoch % siderealPeriod) + siderealPeriod) % siderealPeriod) / siderealPeriod;
-  const signIndex = Math.floor(normalizedCycle * 12) % 12;
-  return ZODIAC_SIGNS[signIndex];
-}
-
-/**
- * Calculates the Rising Sign (Ascendant) based on Sun Sign, exact Birth Time, and Birth Timezone.
- * At local sunrise (~06:00 local solar time), the Ascendant aligns with the Sun Sign,
- * advancing by 1 sign every 2 hours. We also account for timezone standardization vs local solar meridian.
- */
-export function calculateRisingSign(
-  birthDate: string,
-  birthTime: string,
-  birthTimezone: string = 'UTC'
-): ZodiacSign {
-  const sunSign = calculateSunSign(birthDate);
-  const sunIndex = ZODIAC_SIGNS.indexOf(sunSign);
-  const [hourStr, minStr] = (birthTime || '06:00').split(':');
-  const hour = parseInt(hourStr, 10);
-  const minute = parseInt(minStr, 10) || 0;
-  if (isNaN(hour)) return sunSign;
-
-  // Normalize birth time with subtle seasonal equation-of-time adjustment
-  const [, month, day] = birthDate.split('-').map(Number);
-  const dayOfYear = (month || 1) * 30 + (day || 1);
-  const seasonalEquationMins = Math.sin((dayOfYear / 365) * Math.PI * 2) * 14;
-  const tzOffsetMins = getTimezoneOffsetMinutes(birthTimezone);
-  // Subtle meridian correction
-  const meridianCorrectionHours = ((tzOffsetMins % 60) + seasonalEquationMins) / 60;
-
-  const totalHoursSinceSunrise = ((hour + minute / 60 + meridianCorrectionHours - 6) + 24) % 24;
-  const signOffset = Math.floor(totalHoursSinceSunrise / 2);
-  return ZODIAC_SIGNS[(sunIndex + signOffset) % 12];
-}
 
 /**
  * Determines which sign governs the user's recommendations:

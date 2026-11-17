@@ -1,8 +1,10 @@
 import {
   ActivityCategory,
+  BirthPlace,
   ForecastResult,
   ImpactType,
   LifePriority,
+  NatalChart,
   UserProfile,
 } from '../types/astrology';
 
@@ -178,7 +180,7 @@ export function isValidBackendUrl(value: unknown): boolean {
   }
 }
 
-function isValidTimeZone(value: unknown): boolean {
+export function isValidTimeZone(value: unknown): boolean {
   if (typeof value !== 'string' || value.length === 0 || value.length > 100)
     return false;
   try {
@@ -189,7 +191,7 @@ function isValidTimeZone(value: unknown): boolean {
   }
 }
 
-function isValidBirthTime(value: unknown): boolean {
+export function isValidBirthTime(value: unknown): boolean {
   if (typeof value !== 'string' || !/^(\d{2}):(\d{2})$/.test(value)) return false;
   const [h, m] = value.split(':').map(Number);
   return h >= 0 && h <= 23 && m >= 0 && m <= 59;
@@ -220,6 +222,36 @@ export function isValidForecastShape(input: unknown): input is ForecastResult {
   return true;
 }
 
+export function isBirthPlace(input: unknown): input is BirthPlace {
+  if (!input || typeof input !== 'object') return false;
+  const p = input as Record<string, unknown>;
+  return (
+    typeof p.label === 'string' &&
+    p.label.length <= MAX_LOCATION_LENGTH &&
+    typeof p.lat === 'number' &&
+    Math.abs(p.lat) <= 90 &&
+    typeof p.lon === 'number' &&
+    Math.abs(p.lon) <= 180 &&
+    isValidTimeZone(p.tz)
+  );
+}
+
+export function isNatalChart(input: unknown): input is NatalChart {
+  return isChartResponse(input) && typeof (input as { basis?: unknown }).basis === 'string';
+}
+
+export function isChartResponse(input: unknown): input is Omit<NatalChart, 'basis'> {
+  if (!input || typeof input !== 'object') return false;
+  const c = input as Record<string, unknown>;
+  return (
+    ZODIAC_SET.has(c.sun as string) &&
+    ZODIAC_SET.has(c.moon as string) &&
+    (c.rising === undefined || ZODIAC_SET.has(c.rising as string)) &&
+    typeof c.sunUncertain === 'boolean' &&
+    typeof c.moonUncertain === 'boolean'
+  );
+}
+
 export function mergeProfileWithDefaults(
   defaults: UserProfile,
   saved: unknown
@@ -233,6 +265,12 @@ export function mergeProfileWithDefaults(
         dst[key] = src[key];
       }
     }
+  }
+  if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+    // Never pair the default birth place or chart with someone else's birth data.
+    const src = saved as Record<string, unknown>;
+    merged.birthPlace = isBirthPlace(src.birthPlace) ? src.birthPlace : undefined;
+    merged.chart = isNatalChart(src.chart) ? src.chart : undefined;
   }
   if (typeof merged.name !== 'string' || merged.name.length > MAX_NAME_LENGTH) {
     merged.name = defaults.name;

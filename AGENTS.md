@@ -24,5 +24,8 @@
   `Host`. The Vite proxy must keep `changeOrigin: false` or browser requests get a 403.
 - Generating a forecast calls Nebius and Tavily with the keys in `.env` and costs money. For
   smoke tests, override `NEBIUS_BASE_URL` and `DATA_DIR` so nothing real is called or written.
+- `/api/chart` needs `backend/app/resources/de421.bsp` (17 MB, git-ignored). Fetch it once with
+  `cd backend && uv run python scripts/fetch_ephemeris.py`; without it the chart tests fail and the
+  endpoint answers 503.
 - Backend tests never hit the network: upstream calls go through `httpx.MockTransport`
   (`backend/tests/helpers.py`).

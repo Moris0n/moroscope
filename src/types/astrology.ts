@@ -60,17 +60,35 @@ export interface ForecastResult {
   ics_content: string;
 }
 
+export interface BirthPlace {
+  label: string;
+  lat: number;
+  lon: number;
+  tz: string; // IANA timezone of the place
+}
+
+export interface NatalChart {
+  sun: ZodiacSign;
+  moon: ZodiacSign;
+  rising?: ZodiacSign; // only with a known birth time and a birth place
+  sunUncertain: boolean; // birth time unknown and the sign changed that day
+  moonUncertain: boolean;
+  basis: string; // the birth data this chart was calculated from
+}
+
 export interface UserProfile {
   name: string;
   birthDate: string; // YYYY-MM-DD
   birthTime: string; // HH:mm
   hasExactTime: boolean;
   birthLocation: string;
+  birthPlace?: BirthPlace; // chosen from the place search; needed for the Rising sign
   birthTimezone: string; // IANA timezone for birth calculation
   operatingTimezone: string; // IANA timezone for daily schedule & transits
   sunSign: ZodiacSign;
   moonSign: ZodiacSign;
   risingSign?: ZodiacSign;
+  chart?: NatalChart; // last server-calculated chart; the signs above may be manual overrides
   useRisingPrimary: boolean; // When true and hasExactTime is true, Rising sign rules chart
   activeCategories: ActivityCategory[];
   targetMonth: string;

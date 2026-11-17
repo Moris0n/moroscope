@@ -5,12 +5,7 @@
 
 import React, { useRef, useState } from 'react';
 import { HoroscopeSource, UserProfile } from './types/astrology';
-import {
-  DEFAULT_SOURCES,
-  calculateMoonSign,
-  calculateRisingSign,
-  calculateSunSign,
-} from './utils/astrologyEngine';
+import { DEFAULT_SOURCES } from './utils/astrologyEngine';
 import { detectLocalTimezone } from './utils/timezoneEngine';
 import {
   DEFAULT_BACKEND_URL,
@@ -26,6 +21,7 @@ import {
 } from './utils/storage';
 import { INVALID_BACKEND_URL_MESSAGE, saveProfile } from './api/forecastApi';
 import { useForecast } from './hooks/useForecast';
+import { useNatalChart } from './hooks/useNatalChart';
 import { ActiveTab, AppHeader, MobileNav } from './components/Navigation';
 import { AgentProgress } from './components/AgentProgress';
 import { ForecastResults } from './components/ForecastResults';
@@ -40,12 +36,18 @@ const INITIAL_PROFILE: UserProfile = {
   birthDate: '1994-10-17',
   birthTime: '08:45',
   hasExactTime: true,
-  birthLocation: 'New York, NY',
+  birthLocation: 'New York City, New York, United States',
+  birthPlace: {
+    label: 'New York City, New York, United States',
+    lat: 40.7143,
+    lon: -74.006,
+    tz: 'America/New_York',
+  },
   birthTimezone: 'America/New_York',
   operatingTimezone: detectLocalTimezone(),
-  sunSign: calculateSunSign('1994-10-17'),
-  moonSign: calculateMoonSign('1994-10-17', '08:45', 'America/New_York'),
-  risingSign: calculateRisingSign('1994-10-17', '08:45', 'America/New_York'),
+  sunSign: 'Libra',
+  moonSign: 'Aries',
+  risingSign: 'Scorpio',
   useRisingPrimary: true,
   activeCategories: [
     'career',
@@ -88,6 +90,8 @@ export default function App() {
     setError: setForecastError,
     generate,
   } = useForecast();
+
+  const chartStatus = useNatalChart(profile, setProfile);
 
   const [saveProfileStatus, setSaveProfileStatus] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -234,6 +238,7 @@ export default function App() {
               !isSavingProfile && profileDirty ? 'Unsaved changes' : saveProfileStatus
             }
             backendUrlValid={isValidBackendUrl(profile.backendUrl)}
+            chartStatus={chartStatus}
           />
         )}
       </main>

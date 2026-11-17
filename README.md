@@ -15,6 +15,7 @@ that can be downloaded as an `.ics` calendar.
    ```
    npm install
    cd backend && uv sync
+   uv run python scripts/fetch_ephemeris.py   # one-time 17 MB download for sign calculation
    ```
 2. Copy [.env.example](.env.example) to `.env` and set `NEBIUS_API_KEY`, `NEBIUS_BASE_URL`,
    `NEBIUS_MODEL` and `TAVILY_API_KEY` (required to generate forecasts).

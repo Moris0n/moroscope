@@ -1,11 +1,7 @@
 import React from 'react';
 import { Globe, Sparkles } from 'lucide-react';
 import { UserProfile } from '../types/astrology';
-import {
-  ZODIAC_METADATA,
-  calculateRisingSign,
-  getEffectiveChartSign,
-} from '../utils/astrologyEngine';
+import { ZODIAC_METADATA, getEffectiveChartSign } from '../utils/astrologyEngine';
 import { TIMEZONE_OPTIONS, formatTimezoneBadge } from '../utils/timezoneEngine';
 
 interface ProfileSummaryProps {
@@ -70,13 +66,6 @@ export const ProfileSummary: React.FC<ProfileSummaryProps> = ({
                 ...prev,
                 hasExactTime: true,
                 useRisingPrimary: true,
-                risingSign:
-                  prev.risingSign ||
-                  calculateRisingSign(
-                    prev.birthDate,
-                    prev.birthTime || '08:45',
-                    prev.birthTimezone
-                  ),
               }))
             }
             className={toggleClasses(risingActive)}
