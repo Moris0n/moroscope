@@ -41,3 +41,8 @@
 - Privacy rule, covered by tests: name, birth date, time and place never go to Nebius or Tavily.
   The forecast agent gets signs, focus topics and (personal mode) the life context; the life
   context is never written to `data/profiles`.
+- `backend/notebooks/forecast_walkthrough.ipynb` runs the pipeline step by step for a profile in
+  `data/profiles` and prints the source texts, the prompt, the raw LLM answer and the validation
+  result (kernel: `backend/.venv`). Reading the sites is free; the Nebius call only runs with
+  `RUN_LLM = True`. Its outputs contain personal data: clear them before committing. It follows
+  `run_forecast_pipeline` by hand, so update it when the order of the pipeline steps changes.

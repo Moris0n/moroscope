@@ -25,6 +25,7 @@ Google AI Studio (as "CelestialPulse").
 | Backend tests | `npm run test:api` |
 | Backend lint | `cd backend && uv run ruff check .` |
 | Check the sources against the live sites (free) | `cd backend && uv run python scripts/check_sources.py --month "November 2026"` |
+| See a forecast being built step by step (LLM call off by default) | open `backend/notebooks/forecast_walkthrough.ipynb` with the `backend/.venv` kernel |
 | Build frontend | `npm run build` |
 | Production (backend serves `dist/`) | `cd backend && APP_ENV=production uv run python -m app` |
 
