@@ -27,5 +27,17 @@
 - `/api/chart` needs `backend/app/resources/de421.bsp` (17 MB, git-ignored). Fetch it once with
   `cd backend && uv run python scripts/fetch_ephemeris.py`; without it the chart tests fail and the
   endpoint answers 503.
-- Backend tests never hit the network: upstream calls go through `httpx.MockTransport`
-  (`backend/tests/helpers.py`).
+- Backend tests never hit the network: upstream calls and source pages go through
+  `httpx.MockTransport` (`backend/tests/helpers.py`), the YouTube transcript and DNS lookups through
+  fakes on `PipelineDeps`. The pages in `backend/tests/fixtures/` are hand-written stand-ins that
+  copy only the structure of the real sites (headings, links); keep real site text out of them.
+- A forecast reads the source sites directly (`backend/app/webpages.py`, `youtube.py`). When a
+  site changes its layout its reader reports "no forecast" or "failed" instead of guessing. Check
+  all of them against the live sites, free of charge, with
+  `cd backend && uv run python scripts/check_sources.py --month "November 2026" --sign scorpio`,
+  then fix the reader and its fixture together.
+- Source texts are cached under `DATA_DIR/cache/sources/` (7 days; 6 hours for "not published
+  yet"). Delete that directory to force a re-read.
+- Privacy rule, covered by tests: name, birth date, time and place never go to Nebius or Tavily.
+  The forecast agent gets signs, focus topics and (personal mode) the life context; the life
+  context is never written to `data/profiles`.

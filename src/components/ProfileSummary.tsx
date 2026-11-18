@@ -26,18 +26,24 @@ export const ProfileSummary: React.FC<ProfileSummaryProps> = ({
 }) => {
   const effectiveChart = getEffectiveChartSign(profile);
   const risingActive = profile.hasExactTime && profile.useRisingPrimary;
+  const personal = profile.mode === 'personal';
+  const name = personal ? profile.name.trim() : '';
 
   return (
     <section className="rounded-2xl bg-[#10172A] border border-slate-800/80 p-5 sm:p-6">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
         <span className="text-amber-300 font-semibold">
           {ZODIAC_METADATA[effectiveChart.sign].glyph} {effectiveChart.sign} —{' '}
-          {effectiveChart.mode}
+          {personal ? effectiveChart.mode : 'General forecast'}
         </span>
-        <span aria-hidden="true">·</span>
-        <span>Sun in {profile.sunSign}</span>
-        <span aria-hidden="true">·</span>
-        <span>Moon in {profile.moonSign}</span>
+        {personal && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>Sun in {profile.sunSign}</span>
+            <span aria-hidden="true">·</span>
+            <span>Moon in {profile.moonSign}</span>
+          </>
+        )}
         <span aria-hidden="true">·</span>
         <span className="font-mono text-cyan-300">
           {profile.operatingTimezone} ({formatTimezoneBadge(profile.operatingTimezone)})
@@ -48,7 +54,7 @@ export const ProfileSummary: React.FC<ProfileSummaryProps> = ({
         className="text-2xl sm:text-3xl font-bold text-slate-100 mt-2 tracking-tight"
         style={{ textWrap: 'balance' }}
       >
-        {profile.name}&apos;s plan for {profile.targetMonth}
+        {name ? `${name}'s plan` : 'Your plan'} for {profile.targetMonth}
       </h1>
 
       <p className="text-sm sm:text-base text-slate-300 mt-2.5 leading-relaxed max-w-3xl">
@@ -58,7 +64,7 @@ export const ProfileSummary: React.FC<ProfileSummaryProps> = ({
       </p>
 
       <div className="mt-4 pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className={`flex flex-wrap items-center gap-2 ${personal ? '' : 'hidden'}`}>
           <span className="text-xs text-slate-400">Chart Priority Rule:</span>
           <button
             onClick={() =>
@@ -112,8 +118,8 @@ export const ProfileSummary: React.FC<ProfileSummaryProps> = ({
 
       <div className="mt-5 pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="text-xs text-slate-400">
-          Agent pipeline: Nebius query → Tavily search → Nebius aggregation →
-          .ics calendar for{' '}
+          Reads your trusted sources, writes the forecast and builds an .ics
+          calendar for{' '}
           <span className="text-amber-300 font-medium">{profile.targetMonth}</span>
         </p>
         <button
@@ -123,7 +129,11 @@ export const ProfileSummary: React.FC<ProfileSummaryProps> = ({
         >
           <Sparkles className="w-4 h-4" />
           <span>
-            {forecastLoading ? 'Generating Forecast...' : 'Generate Personal Forecast'}
+            {forecastLoading
+              ? 'Generating Forecast...'
+              : personal
+              ? 'Generate Personal Forecast'
+              : 'Generate Forecast'}
           </span>
         </button>
       </div>

@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import urlsplit
+
+import httpx
 
 LOCAL_HOSTNAMES = ("localhost", "127.0.0.1", "[::1]")
 DEFAULT_PORT = 8000
 DEFAULT_FRONTEND_PORT = 3000
+PIPELINE_TIMEOUT_SECONDS = 180.0
 
 
 class PipelineError(Exception):
@@ -18,6 +22,20 @@ class PipelineError(Exception):
         super().__init__(message)
         self.status = status
         self.message = message
+
+
+@dataclass
+class PipelineDeps:
+    env: Mapping[str, str]
+    http: httpx.AsyncClient
+    data_dir: Path
+    allowed_hosts: frozenset[str]
+    timeout_seconds: float = PIPELINE_TIMEOUT_SECONDS
+    # Seams for the source readers; None means the real implementation.
+    fetch_transcript: Callable[[str], list[tuple[float, str]]] | None = None
+    resolve_host: Callable[[str], Awaitable[list[str]]] | None = None
+    page_pause_seconds: float = 1.0
+    now: Callable[[], float] | None = None
 
 
 @dataclass(frozen=True)

@@ -22,7 +22,8 @@ export function useNatalChart(
 ): ChartStatus {
   const [status, setStatus] = useState<Omit<ChartStatus, 'retry'>>({ state: 'idle' });
   const [attempt, setAttempt] = useState(0);
-  const basis = chartBasis(profile);
+  // A general profile has no birth data; its sign was chosen by hand and must not be replaced.
+  const basis = profile.mode === 'general' ? null : chartBasis(profile);
   const stale = basis !== null && profile.chart?.basis !== basis;
   const { backendUrl } = profile;
 

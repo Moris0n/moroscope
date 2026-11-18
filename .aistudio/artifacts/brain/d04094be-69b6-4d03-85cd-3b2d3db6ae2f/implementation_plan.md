@@ -14,7 +14,10 @@ Astrology is framed as interpretive planning guidance, never as prediction, fina
 | Sign derivation | Real ephemeris on the Python server (Skyfield) plus birth-place geocoding; the client caches the last chart for offline viewing |
 | Storage | On the user's device only for now; accounts in a later phase |
 | Calendar | `.ics` download only (full month and per event) |
-| Default sources | Curated list first, falling back to open web search |
+| Default sources | Curated list first (read directly, not searched), falling back to open web search |
+| Curated list | Written in the Stars by Rux (YouTube), Cafe Astrology, Astrology Zone, Astrostyle, Sally Kirkman; English only |
+| Personalisation | Chosen at onboarding. Personalised: life context goes to the LLM; name and birth data never do. General: only a sign is asked |
+| YouTube | Channel RSS feed + per-sign timestamps + unofficial transcript download (`youtube-transcript-api`) |
 | User sources | Exclusive: if the user added sources, only those are used |
 | Energy charts | Hidden for now (they run on fake data); rebuilt later on real transits |
 | Categories | 10 house-based life areas, replacing both current lists |
@@ -74,8 +77,8 @@ Astrology is framed as interpretive planning guidance, never as prediction, fina
 **User sources:** add a site, domain or URL; enable, disable or remove it. Only http(s), deduplicated by domain.
 
 **Retrieval logic**
-1. The user has active sources: **exclusive** mode. Tavily `include_domains` is set to the user's domains only.
-2. Otherwise: search the curated domains. If that returns too few dated, month-specific results, fall back to open web search.
+1. The user has active sources: **exclusive** mode. Pages and YouTube channels are read directly; a bare site is searched with Tavily `include_domains`.
+2. Otherwise: read the curated sources directly (each reader checks month and year and cuts out the sign). If fewer than two have something, fall back to open web search.
 3. Exclusive mode with no usable evidence: show an evidence-gap message with a one-click "also use default sources" retry. The search is never broadened silently.
 
 Every event cites at least one retrieved URL (the existing guarantee stays). Per-source agreement is shown in the event detail.
@@ -224,13 +227,14 @@ Notes from the port: validation is still hand-written (a 1:1 port of the TypeScr
 ### Phase 1: Profile and real chart
 - Birth-place search and geocoding (done: bundled GeoNames city list, `GET /api/places`).
 - `/api/chart` with Skyfield (done; manual sign overrides are kept and marked in the UI).
-- Life-context form (stored on the device only; not sent to the LLM before Phase 3).
-- Onboarding flow.
+- Life-context form (done in Phase 2, and sent to the forecast agent in personalised mode).
+- Onboarding flow (done in Phase 2: personalised or general).
 
-### Phase 2: Sources
-- Curated list.
-- User sources (exclusive mode).
-- `include_domains` retrieval, fallback, and the evidence-gap retry.
+### Phase 2: Sources (done)
+- Curated list, read directly; YouTube monthly video by transcript.
+- User sources (exclusive mode): pages, sites, YouTube channels.
+- Fallback to web search, and the evidence-gap retry.
+- Onboarding with personalised / general mode; life context sent to the forecast agent.
 
 ### Phase 3: Life areas and monthly output
 - Taxonomy end to end (Pydantic models, prompts, TypeScript types).
@@ -250,8 +254,9 @@ Notes from the port: validation is still hand-written (a 1:1 port of the TypeScr
 
 - **Geocoding:** decided: bundled GeoNames city database (timezone included). Open: local-language city names and places under 15,000 people.
 - **Ephemeris:** decided: Skyfield with JPL DE421 (birth years 1900 to 2050).
-- **Curated sources:** the initial list; English only at first?
-- **LLM privacy:** how much life context is sent to the LLM provider (consent toggle?).
+- **Curated sources:** decided: five English sources (see the decisions table). Open: more sources, other languages.
+- **LLM privacy:** decided: the onboarding choice is the consent; life context only, never name or birth data. Open: the server still stores the birth profile snapshot.
+- **Source access at scale:** transcript download from cloud hosts, crawl delays, copyright of source excerpts sent to the LLM.
 - **Hosting:** the Python hosting target.
 
 ## 7. Non-goals (for now)

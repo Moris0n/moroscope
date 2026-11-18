@@ -52,6 +52,31 @@ MAX_RESULT_CONTENT_LENGTH = 12000
 MAX_EXCERPT_LENGTH = 8000
 MAX_NAME_LENGTH = 120
 MAX_LOCATION_LENGTH = 200
+MAX_GOALS_LENGTH = 500
+MAX_UPCOMING_EVENTS = 10
+MAX_EVENT_LABEL_LENGTH = 120
+
+PROFILE_MODES = ("general", "personal")
+
+# Life context: every field is optional. Single-choice fields, then multiple-choice fields.
+LIFE_CONTEXT_CHOICES = {
+    "relationship": ("single", "dating", "inRelationship", "married", "separated", "complicated"),
+    "work": (
+        "employed",
+        "jobSeeking",
+        "consideringChange",
+        "selfEmployed",
+        "student",
+        "parentalLeave",
+        "retired",
+    ),
+    "moneyFocus": ("saving", "bigPurchase", "investing", "debt"),
+}
+LIFE_CONTEXT_MULTI_CHOICES = {
+    "kids": ("none", "trying", "expecting", "under5", "age5to12", "teens", "adult"),
+    "healthFocus": ("fitness", "sleep", "stress", "nutrition", "habit"),
+}
+LIFE_CONTEXT_FLAGS = ("lookingForPartner", "caringForParents")
 
 MONTH_NAMES = [
     "January",
@@ -98,6 +123,7 @@ _TIME_RE = re.compile(r"([0-9]{2}):([0-9]{2})")
 _UUID_RE = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
+_THINK_RE = re.compile(r"<think>[\s\S]*?</think>", re.IGNORECASE)
 _FENCE_RE = re.compile(r"```(?:json|JSON)?\s*\n([\s\S]*?)\n?\s*```")
 
 
@@ -214,6 +240,113 @@ def _has_duplicates(items: list[Any]) -> bool:
     return len(set(strings)) != len(strings)
 
 
+def profile_mode(profile: Any) -> str:
+    """ "general" (only a sign is known) or "personal"; profiles without a mode are personal."""
+    mode = profile.get("mode") if isinstance(profile, dict) else None
+    return "general" if mode == "general" else "personal"
+
+
+def primary_sign(profile: dict[str, Any]) -> tuple[str, str]:
+    """(sign, kind) the forecast is read for: the Rising sign when it leads, else the Sun sign."""
+    if profile_mode(profile) == "general":
+        return profile["sunSign"], "chosen"
+    if (
+        profile.get("hasExactTime")
+        and profile.get("useRisingPrimary")
+        and profile.get("risingSign")
+    ):
+        return profile["risingSign"], "rising"
+    return profile["sunSign"], "sun"
+
+
+def _validate_common(p: dict[str, Any], errors: list[str]) -> None:
+    if not _in(p.get("sunSign"), ZODIAC_SIGNS):
+        errors.append("sunSign must be a valid zodiac sign")
+    if not parse_month_range(p.get("targetMonth")):
+        errors.append('targetMonth must be in "Month YYYY" format, e.g. "November 2026"')
+    priorities = p.get("priorities")
+    if not isinstance(priorities, list):
+        errors.append("priorities must be an array")
+    else:
+        if len(priorities) > len(LIFE_PRIORITIES):
+            errors.append("priorities has too many entries")
+        for item in priorities:
+            if not _in(item, _PRIORITY_SET):
+                errors.append(f"unknown priority: {item}")
+        if _has_duplicates(priorities):
+            errors.append("priorities must not contain duplicates")
+
+
+def validate_life_context(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, dict):
+        return ["lifeContext must be an object"]
+    errors: list[str] = []
+    for key, choices in LIFE_CONTEXT_CHOICES.items():
+        if value.get(key) not in (None, "") and value[key] not in choices:
+            errors.append(f"lifeContext.{key} is not a known option")
+    for key, choices in LIFE_CONTEXT_MULTI_CHOICES.items():
+        items = value.get(key)
+        if items is None:
+            continue
+        if (
+            not isinstance(items, list)
+            or len(items) > len(choices)
+            or not all(isinstance(item, str) and item in choices for item in items)
+            or _has_duplicates(items)
+        ):
+            errors.append(f"lifeContext.{key} must be an array of known options")
+    for key in LIFE_CONTEXT_FLAGS:
+        if value.get(key) is not None and not isinstance(value[key], bool):
+            errors.append(f"lifeContext.{key} must be a boolean")
+    goals = value.get("goals")
+    if goals is not None and (not isinstance(goals, str) or len(goals) > MAX_GOALS_LENGTH):
+        errors.append(f"lifeContext.goals must be a string up to {MAX_GOALS_LENGTH} chars")
+    upcoming = value.get("upcomingEvents")
+    if upcoming is not None:
+        if not isinstance(upcoming, list) or len(upcoming) > MAX_UPCOMING_EVENTS:
+            errors.append(
+                f"lifeContext.upcomingEvents must be an array of at most {MAX_UPCOMING_EVENTS}"
+            )
+        else:
+            for item in upcoming:
+                if (
+                    not isinstance(item, dict)
+                    or not parse_iso_date(item.get("date"))
+                    or not _bounded_text(item.get("label"), MAX_EVENT_LABEL_LENGTH)
+                ):
+                    errors.append("lifeContext.upcomingEvents entries need a date and a label")
+                    break
+    return errors
+
+
+def sanitize_life_context(profile: Any) -> dict[str, Any]:
+    """The life context of a valid personal profile, without empty answers. {} for anything else."""
+    if profile_mode(profile) != "personal" or not isinstance(profile, dict):
+        return {}
+    src = profile.get("lifeContext")
+    if not isinstance(src, dict):
+        return {}
+    out: dict[str, Any] = {}
+    for key in LIFE_CONTEXT_CHOICES:
+        if src.get(key):
+            out[key] = src[key]
+    for key in LIFE_CONTEXT_MULTI_CHOICES:
+        if src.get(key):
+            out[key] = list(src[key])
+    for key in LIFE_CONTEXT_FLAGS:
+        if src.get(key) is True:
+            out[key] = True
+    if isinstance(src.get("goals"), str) and src["goals"].strip():
+        out["goals"] = src["goals"].strip()
+    if src.get("upcomingEvents"):
+        out["upcomingEvents"] = [
+            {"date": item["date"], "label": item["label"].strip()} for item in src["upcomingEvents"]
+        ]
+    return out
+
+
 def validate_user_profile(profile: Any) -> list[str]:
     """Return a list of validation errors; an empty list means the profile is valid."""
     if not isinstance(profile, dict):
@@ -221,9 +354,17 @@ def validate_user_profile(profile: Any) -> list[str]:
     errors: list[str] = []
     p = profile
 
+    mode = p.get("mode", _MISSING)
+    if mode is not _MISSING and mode not in PROFILE_MODES:
+        errors.append("mode must be general or personal")
+    if mode == "general":
+        # A general forecast needs a sign and a month; nothing else is read or kept.
+        _validate_common(p, errors)
+        return errors
+
     name = p.get("name")
-    if not isinstance(name, str) or not name.strip() or len(name) > MAX_NAME_LENGTH:
-        errors.append("name must be a nonempty string up to 120 chars")
+    if not isinstance(name, str) or len(name) > MAX_NAME_LENGTH:
+        errors.append("name must be a string up to 120 chars")
     if not parse_iso_date(p.get("birthDate")):
         errors.append("birthDate must be a real YYYY-MM-DD date")
     location = p.get("birthLocation")
@@ -241,8 +382,6 @@ def validate_user_profile(profile: Any) -> list[str]:
     elif birth_time is not _MISSING and birth_time != "" and not is_valid_birth_time(birth_time):
         errors.append("birthTime must be empty or a valid HH:mm time")
 
-    if not _in(p.get("sunSign"), ZODIAC_SIGNS):
-        errors.append("sunSign must be a valid zodiac sign")
     if not _in(p.get("moonSign"), ZODIAC_SIGNS):
         errors.append("moonSign must be a valid zodiac sign")
     rising = p.get("risingSign", _MISSING)
@@ -254,20 +393,7 @@ def validate_user_profile(profile: Any) -> list[str]:
     if not is_valid_time_zone(p.get("operatingTimezone")):
         errors.append("operatingTimezone must be a valid IANA timezone")
 
-    if not parse_month_range(p.get("targetMonth")):
-        errors.append('targetMonth must be in "Month YYYY" format, e.g. "November 2026"')
-
-    priorities = p.get("priorities")
-    if not isinstance(priorities, list):
-        errors.append("priorities must be an array")
-    else:
-        if len(priorities) > len(LIFE_PRIORITIES):
-            errors.append("priorities has too many entries")
-        for item in priorities:
-            if not _in(item, _PRIORITY_SET):
-                errors.append(f"unknown priority: {item}")
-        if _has_duplicates(priorities):
-            errors.append("priorities must not contain duplicates")
+    _validate_common(p, errors)
 
     categories = p.get("activeCategories")
     if not isinstance(categories, list) or not categories:
@@ -285,10 +411,12 @@ def validate_user_profile(profile: Any) -> list[str]:
     if backend_url is not _MISSING and not is_valid_backend_url(backend_url):
         errors.append("backendUrl must be empty or a plain http(s) origin")
 
+    errors.extend(validate_life_context(p.get("lifeContext")))
     return errors
 
 
 PROFILE_KEYS = (
+    "mode",
     "name",
     "birthDate",
     "birthTime",
@@ -306,10 +434,18 @@ PROFILE_KEYS = (
 )
 
 
+GENERAL_PROFILE_KEYS = ("mode", "sunSign", "targetMonth", "priorities")
+
+
 def sanitize_profile(profile: Any) -> dict[str, Any]:
-    """Keep only the allowlisted profile fields (drops client-only ones such as backendUrl)."""
+    """Keep only the allowlisted profile fields (drops client-only ones such as backendUrl).
+
+    A general profile keeps nothing but the chosen sign, the month and the focus topics. The life
+    context is never part of the stored profile.
+    """
     src = profile if isinstance(profile, dict) else {}
-    return {key: src[key] for key in PROFILE_KEYS if key in src}
+    keys = GENERAL_PROFILE_KEYS if profile_mode(src) == "general" else PROFILE_KEYS
+    return {key: src[key] for key in keys if key in src}
 
 
 def _reject_constant(name: str) -> Any:
@@ -317,12 +453,25 @@ def _reject_constant(name: str) -> Any:
 
 
 def parse_llm_json(raw: Any) -> Any:
-    """Parse model output as JSON, unwrapping a single Markdown code fence. Never repairs."""
-    text = (raw or "").strip()
-    fence = _FENCE_RE.fullmatch(text)
+    """Parse model output as JSON. Never repairs the JSON itself.
+
+    Reasoning models sometimes wrap the answer: a `<think>` block first, a Markdown code fence, or
+    a sentence before or after. Those wrappers are removed; the JSON inside must be valid as is.
+    """
+    text = _THINK_RE.sub("", raw or "").strip()
+    fence = _FENCE_RE.search(text)
+    candidates = [text]
     if fence:
-        text = fence.group(1).strip()
-    return json.loads(text, parse_constant=_reject_constant)
+        candidates.append(fence.group(1).strip())
+    start, end = text.find("{"), text.rfind("}")
+    if 0 <= start < end:
+        candidates.append(text[start : end + 1])
+    for candidate in candidates[:-1]:
+        try:
+            return json.loads(candidate, parse_constant=_reject_constant)
+        except ValueError:
+            continue
+    return json.loads(candidates[-1], parse_constant=_reject_constant)
 
 
 def _bounded_text(value: Any, max_length: int) -> bool:

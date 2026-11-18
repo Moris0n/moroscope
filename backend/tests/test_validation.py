@@ -4,6 +4,8 @@ from app.validation import (
     inclusive_day_span,
     parse_llm_json,
     parse_month_range,
+    primary_sign,
+    sanitize_life_context,
     sanitize_profile,
     validate_forecast_payload,
     validate_user_profile,
@@ -58,8 +60,18 @@ def test_validate_user_profile_accepts_valid_profiles():
         {"priorities": ["careerTransition", "careerTransition"]},
         {"priorities": [{"nested": 1}]},
         {"birthDate": "1994-02-30"},
-        {"name": ""},
+        {"name": None},
         {"name": "x" * 121},
+        {"mode": "anonymous"},
+        {"lifeContext": "single"},
+        {"lifeContext": {"relationship": "royal"}},
+        {"lifeContext": {"kids": ["under5", "under5"]}},
+        {"lifeContext": {"kids": "under5"}},
+        {"lifeContext": {"lookingForPartner": "yes"}},
+        {"lifeContext": {"goals": "x" * 501}},
+        {"lifeContext": {"upcomingEvents": [{"date": "2026-11-31", "label": "Move"}]}},
+        {"lifeContext": {"upcomingEvents": [{"date": "2026-11-16", "label": " "}]}},
+        {"lifeContext": {"upcomingEvents": [{"date": "2026-11-16", "label": "x"}] * 11}},
         {"sunSign": "NotASign"},
         {"moonSign": None},
         {"risingSign": None},
@@ -160,6 +172,10 @@ def test_validate_forecast_payload_returns_trimmed_events():
 def test_parse_llm_json_accepts_fenced_json_but_never_repairs():
     assert parse_llm_json('{"a":1}') == {"a": 1}
     assert parse_llm_json('```json\n{"a":1}\n```') == {"a": 1}
+    # Wrappers a reasoning model may add around the answer are removed.
+    assert parse_llm_json('<think>{"draft": 1} hmm</think>\n{"a":1}') == {"a": 1}
+    assert parse_llm_json('Here is the forecast:\n```json\n{"a":1}\n```\nDone.') == {"a": 1}
+    assert parse_llm_json('Sure! {"a": {"b": "}"}} Hope it helps.') == {"a": {"b": "}"}}
     with pytest.raises(ValueError):
         parse_llm_json('{"a":')
     with pytest.raises(ValueError):
@@ -173,3 +189,53 @@ def test_inclusive_day_span():
         "2026-11-07",
     ]
     assert inclusive_day_span("2026-11-07", "2026-11-05") == []
+
+
+def test_personal_profiles_may_be_nameless_and_carry_a_life_context():
+    context = {
+        "relationship": "married",
+        "lookingForPartner": False,
+        "work": "selfEmployed",
+        "kids": ["trying", "expecting", "teens"],
+        "caringForParents": True,
+        "moneyFocus": "bigPurchase",
+        "healthFocus": ["stress"],
+        "goals": "Move house",
+        "upcomingEvents": [{"date": "2026-11-20", "label": "Moving day"}],
+    }
+    profile = {**VALID_PROFILE, "mode": "personal", "name": "", "lifeContext": context}
+    assert validate_user_profile(profile) == []
+    assert validate_user_profile({**VALID_PROFILE, "lifeContext": {}}) == []
+    assert "lifeContext" not in sanitize_profile(profile)
+    assert sanitize_life_context(profile) == {k: v for k, v in context.items() if v is not False}
+    assert sanitize_life_context({**profile, "lifeContext": {"moneyFocus": "", "goals": " "}}) == {}
+
+
+def test_general_profiles_need_only_a_sign_and_keep_nothing_else():
+    general = {
+        "mode": "general",
+        "sunSign": "Leo",
+        "targetMonth": "November 2026",
+        "priorities": [],
+    }
+    assert validate_user_profile(general) == []
+    assert validate_user_profile({**general, "sunSign": "Lion"}) != []
+    assert validate_user_profile({**general, "targetMonth": "soon"}) != []
+    full = {**VALID_PROFILE, **general, "lifeContext": {"goals": "x"}}
+    assert validate_user_profile(full) == []
+    assert sanitize_profile(full) == general
+    assert sanitize_life_context(full) == {}
+    assert primary_sign(full) == ("Leo", "chosen")
+
+
+def test_primary_sign_is_the_rising_sign_only_when_it_leads():
+    assert primary_sign(VALID_PROFILE) == ("Scorpio", "rising")
+    assert primary_sign({**VALID_PROFILE, "useRisingPrimary": False}) == ("Libra", "sun")
+    assert primary_sign({**VALID_PROFILE, "hasExactTime": False}) == ("Libra", "sun")
+    no_rising = {k: v for k, v in VALID_PROFILE.items() if k != "risingSign"}
+    assert primary_sign(no_rising) == ("Libra", "sun")
+
+
+def test_children_answers_include_childless_and_trying():
+    for kids in (["none"], ["none", "trying"], ["trying", "under5"]):
+        assert validate_user_profile({**VALID_PROFILE, "lifeContext": {"kids": kids}}) == []

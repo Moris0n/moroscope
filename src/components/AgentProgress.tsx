@@ -6,10 +6,10 @@ interface AgentProgressProps {
 }
 
 const STEPS: { step: number; label: string }[] = [
-  { step: 1, label: 'Formulating Deep Queries' },
-  { step: 2, label: 'Executing Tavily Ephemeris Web Search' },
-  { step: 3, label: 'Grounding Transit Dates & Personal Houses' },
-  { step: 4, label: 'Compiling RFC Calendar (.ics)' },
+  { step: 1, label: 'Preparing' },
+  { step: 2, label: 'Reading your sources' },
+  { step: 3, label: 'Writing your forecast' },
+  { step: 4, label: 'Building the calendar' },
 ];
 
 export const AgentProgress: React.FC<AgentProgressProps> = ({

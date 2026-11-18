@@ -359,7 +359,12 @@ export function getEffectiveChartSign(profile: UserProfile): {
   mode: 'Rising Sign (Ascendant)' | 'Sun Sign (Solar Fallback)';
   planetRuler: string;
 } {
-  if (profile.hasExactTime && profile.useRisingPrimary && profile.risingSign) {
+  if (
+    profile.mode !== 'general' &&
+    profile.hasExactTime &&
+    profile.useRisingPrimary &&
+    profile.risingSign
+  ) {
     return {
       sign: profile.risingSign,
       mode: 'Rising Sign (Ascendant)',

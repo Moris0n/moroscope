@@ -14,7 +14,9 @@ const storageKey = (name: string): StorageKey => ({
 export const STORAGE_KEYS = {
   PROFILE: storageKey('profile'),
   PROFILE_ID: storageKey('profile_id'),
-  SOURCES: storageKey('sources'),
+  // 'sources' held the placeholder list of the first prototype; it is no longer read.
+  SOURCE_SETTINGS: storageKey('source_settings'),
+  ONBOARDED: storageKey('onboarded'),
 };
 
 export function readStoredString({ key, legacyKey }: StorageKey): string | null {

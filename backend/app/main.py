@@ -21,6 +21,7 @@ from .chart import ChartCalculator
 from .config import PipelineError, load_allowed_hosts
 from .pipeline import PipelineDeps, run_forecast_pipeline, save_profile_snapshot
 from .places import search_places
+from .sources import curated_sources_public, validate_sources_config
 from .validation import (
     MAX_EXCERPT_LENGTH,
     is_utf8_safe,
@@ -134,6 +135,10 @@ def create_app(
     async def places(q: str = "") -> Response:
         return JSONResponse({"results": await asyncio.to_thread(search_places, q)})
 
+    @app.get("/api/sources/curated")
+    async def curated_sources() -> Response:
+        return JSONResponse({"sources": curated_sources_public()})
+
     @app.post("/api/chart")
     async def compute_chart(request: Request) -> Response:
         body = await _read_json_body(request)
@@ -176,6 +181,9 @@ def create_app(
             not isinstance(excerpt, str) or len(excerpt) > MAX_EXCERPT_LENGTH
         ):
             return _error(400, "customExcerpt must be a bounded string.")
+        source_errors, sources = validate_sources_config(body.get("sources"))
+        if source_errors:
+            return _error(400, "; ".join(source_errors))
 
         events: asyncio.Queue[tuple[str, Any] | None] = asyncio.Queue()
 
@@ -187,6 +195,7 @@ def create_app(
                     deps,
                     lambda step: events.put_nowait(("progress", {"step": step})),
                     body.get("profileId"),
+                    sources,
                 )
 
         task = asyncio.create_task(run())

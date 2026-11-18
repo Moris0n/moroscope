@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  ForecastEvidence,
   ForecastResult,
   LifePriority,
-  UserProfile,
+  SourceReport,
 } from '../types/astrology';
 import {
   ForecastPayload,
+  ForecastRequest,
   connectionErrorMessage,
   requestForecast,
 } from '../api/forecastApi';
@@ -19,6 +21,8 @@ export interface StoredForecast {
   targetMonth: string;
   priorities: LifePriority[];
   profileId: string | null;
+  sources: SourceReport[];
+  evidence: ForecastEvidence | null;
 }
 
 export function useForecast() {
@@ -30,11 +34,8 @@ export function useForecast() {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const generate = async (
-    profile: UserProfile,
-    profileId: string | null,
-    customExcerpt?: string
-  ): Promise<ForecastPayload | null> => {
+  const generate = async (request: ForecastRequest): Promise<ForecastPayload | null> => {
+    const { profile } = request;
     if (loading) return null;
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -46,16 +47,12 @@ export function useForecast() {
     setForecast(null);
 
     try {
-      const payload = await requestForecast(
-        profile,
-        profileId,
-        customExcerpt,
-        controller.signal,
-        setStep
-      );
+      const payload = await requestForecast(request, controller.signal, setStep);
       setForecast({
         result: payload.result,
         rawJson: JSON.stringify(payload, null, 2),
+        sources: payload.sources,
+        evidence: payload.evidence,
         generatedAt: new Date().toISOString(),
         targetMonth: profile.targetMonth,
         priorities: [...profile.priorities],

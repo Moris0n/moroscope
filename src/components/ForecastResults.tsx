@@ -6,7 +6,20 @@ import {
   copyToClipboard,
   downloadIcs,
   impactBadgeClasses,
+  sourceLabel,
 } from '../utils/forecastHelpers';
+
+const STATUS_LABELS = {
+  used: { label: 'used', classes: 'text-emerald-300' },
+  no_forecast: { label: 'no forecast yet', classes: 'text-amber-300' },
+  failed: { label: 'could not be read', classes: 'text-rose-300' },
+} as const;
+
+const EVIDENCE_NOTES = {
+  user: 'Built only from the sources you added.',
+  curated: 'Built from the default sources.',
+  web: 'The default sources had too little for this month, so the open web was searched as well.',
+} as const;
 
 const CopyJsonButton: React.FC<{ rawJson: string }> = ({ rawJson }) => {
   const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -38,9 +51,16 @@ const CopyJsonButton: React.FC<{ rawJson: string }> = ({ rawJson }) => {
   );
 };
 
-export const ForecastResults: React.FC<{ forecast: StoredForecast }> = ({
+interface ForecastResultsProps {
+  forecast: StoredForecast;
+  onRetryWithDefaultSources: () => void;
+}
+
+export const ForecastResults: React.FC<ForecastResultsProps> = ({
   forecast,
+  onRetryWithDefaultSources,
 }) => {
+  const { sources, evidence } = forecast;
   return (
     <section className="rounded-2xl bg-[#10172A] border border-slate-800/80 p-5 sm:p-6 space-y-5">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
@@ -89,10 +109,18 @@ export const ForecastResults: React.FC<{ forecast: StoredForecast }> = ({
             No source-backed events found for {forecast.targetMonth}.
           </p>
           <p className="text-xs text-slate-500 mt-1">
-            The retrieved evidence did not contain adequately dated
-            items for this month — nothing was fabricated to fill the
-            gap.
+            The sources did not contain adequately dated items for this
+            month — nothing was made up to fill the gap.
           </p>
+          {evidence?.gap && evidence.mode === 'user' && (
+            <button
+              type="button"
+              onClick={onRetryWithDefaultSources}
+              className="mt-4 min-h-[42px] px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              Also use default sources
+            </button>
+          )}
         </div>
       ) : (
         <ol className="space-y-3">
@@ -135,15 +163,48 @@ export const ForecastResults: React.FC<{ forecast: StoredForecast }> = ({
                     href={url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[11px] text-cyan-300 hover:underline font-mono truncate max-w-[300px]"
+                    title={url}
+                    className="text-[11px] text-cyan-300 hover:underline truncate max-w-[300px]"
                   >
-                    {url}
+                    {sourceLabel(url, sources)}
                   </a>
                 ))}
               </div>
             </li>
           ))}
         </ol>
+      )}
+
+      {sources.length > 0 && (
+        <div className="pt-4 border-t border-slate-800/80">
+          <h3 className="text-xs font-semibold text-slate-300">Sources for this forecast</h3>
+          {evidence && <p className="text-xs text-slate-500 mt-0.5">{EVIDENCE_NOTES[evidence.mode]}</p>}
+          <ul className="mt-2 space-y-1">
+            {sources.map((source) => (
+              <li key={source.id} className="text-xs text-slate-400">
+                {source.url ? (
+                  <a
+                    href={source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-slate-200 hover:underline"
+                  >
+                    {source.name}
+                  </a>
+                ) : (
+                  <span className="text-slate-200">{source.name}</span>
+                )}
+                <span className="mx-1.5" aria-hidden="true">
+                  ·
+                </span>
+                <span className={STATUS_LABELS[source.status].classes}>
+                  {STATUS_LABELS[source.status].label}
+                </span>
+                {source.status !== 'used' && source.reason ? ` (${source.reason})` : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );

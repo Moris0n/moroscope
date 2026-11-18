@@ -1,6 +1,16 @@
-import { ForecastResult, UserProfile } from '../types/astrology';
-import { isValidForecastShape } from '../utils/forecastShared';
-import { readForecastSseStream } from '../utils/forecastHelpers';
+import { SourceSettings, UserProfile } from '../types/astrology';
+import {
+  isValidForecastShape,
+  profileRequestBody,
+  sourcesRequestBody,
+} from '../utils/forecastShared';
+import {
+  ForecastPayload,
+  parseForecastPayload,
+  readForecastSseStream,
+} from '../utils/forecastHelpers';
+
+export type { ForecastPayload };
 
 export const INVALID_BACKEND_URL_MESSAGE =
   'Invalid backend URL — use a plain http(s) origin without credentials, query, or fragment.';
@@ -13,9 +23,12 @@ export const connectionErrorMessage = (profile: UserProfile) =>
     profile.backendUrl || 'this origin'
   }. Make sure the API is running (npm run dev:api).`;
 
-export interface ForecastPayload {
-  result: ForecastResult;
+export interface ForecastRequest {
+  profile: UserProfile;
   profileId: string | null;
+  sources: SourceSettings;
+  includeCurated?: boolean; // also use the default sources next to the user's own
+  customExcerpt?: string;
 }
 
 export async function saveProfile(
@@ -27,7 +40,10 @@ export async function saveProfile(
     response = await fetch(`${apiBase(profile)}/api/profiles`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ profile, profileId: profileId ?? undefined }),
+      body: JSON.stringify({
+        profile: profileRequestBody(profile, { lifeContext: false }),
+        profileId: profileId ?? undefined,
+      }),
     });
   } catch {
     throw new Error(connectionErrorMessage(profile));
@@ -42,9 +58,7 @@ export async function saveProfile(
 }
 
 export async function requestForecast(
-  profile: UserProfile,
-  profileId: string | null,
-  customExcerpt: string | undefined,
+  { profile, profileId, sources, includeCurated, customExcerpt }: ForecastRequest,
   signal: AbortSignal,
   onProgress: (step: number) => void
 ): Promise<ForecastPayload> {
@@ -56,9 +70,10 @@ export async function requestForecast(
     },
     signal,
     body: JSON.stringify({
-      profile,
+      profile: profileRequestBody(profile),
       profileId: profileId ?? undefined,
       customExcerpt,
+      sources: sourcesRequestBody(sources, includeCurated),
     }),
   });
 
@@ -78,7 +93,7 @@ export async function requestForecast(
         data?.error || `Forecast request failed (HTTP ${response.status}).`
       );
     }
-    payload = data;
+    payload = parseForecastPayload(data);
   }
 
   if (!isValidForecastShape(payload?.result)) {

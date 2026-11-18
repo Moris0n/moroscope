@@ -1,328 +1,337 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Check, ExternalLink, Globe, Plus, Sparkles, Trash2, Video } from 'lucide-react';
 import {
-  Check,
-  ExternalLink,
-  Globe,
-  Newspaper,
-  Plus,
-  Radio,
-  Sliders,
-  Sparkles,
-  Video,
-  X,
-} from 'lucide-react';
-import {
-  EnergyDimension,
-  HoroscopeSource,
-  SourceType,
+  CuratedSource,
+  SourceReport,
+  SourceSettings,
+  SourceStatus,
 } from '../types/astrology';
-import { ENERGY_DIMENSIONS_METADATA } from '../utils/astrologyEngine';
+import { fetchCuratedSources } from '../api/sourcesApi';
 import {
-  TIMEZONE_OPTIONS,
-  formatHourDecimal,
-  formatTimezoneBadge,
-  normalizeSourceHourToUtc,
-  projectUtcHourToUserLocal,
-} from '../utils/timezoneEngine';
+  MAX_USER_SOURCES,
+  normalizeSourceUrl,
+  sourceUrlKey,
+} from '../utils/forecastShared';
 
 interface SourcesManagerProps {
-  sources: HoroscopeSource[];
-  operatingTimezone: string;
-  onToggleSource: (id: string) => void;
-  onChangeWeight: (id: string, weight: number) => void;
-  onAddSuggestedSource: (source: HoroscopeSource) => void;
+  settings: SourceSettings;
+  onChange: (update: (prev: SourceSettings) => SourceSettings) => void;
+  backendUrl: string;
+  report: SourceReport[] | null; // from the last forecast
+  reportMonth: string | null;
   onExtractLiveText: (excerpt: string) => void;
   isSynthesizing: boolean;
 }
 
-const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
-  newspaper: 'Newspaper Column',
-  column: 'Astrology Syndicate',
-  blog: 'Esoteric Blog',
-  video: 'YouTube / Video Channel',
+const STATUS_TEXT: Record<SourceStatus, { label: string; classes: string }> = {
+  used: { label: 'Used', classes: 'text-emerald-300' },
+  no_forecast: { label: 'No forecast yet', classes: 'text-amber-300' },
+  failed: { label: 'Could not be read', classes: 'text-rose-300' },
 };
 
+const isYouTube = (url: string) => /(^|\.)(youtube\.com|youtu\.be)$/.test(new URL(url).hostname);
+
+function describeUserSource(url: string): string {
+  const u = new URL(url);
+  if (isYouTube(url)) return 'YouTube: the monthly video of this channel is read';
+  if (u.pathname === '/' && !u.search) return 'Whole site: searched for the month';
+  return 'Page: read directly';
+}
+
+const SourceToggle: React.FC<{ active: boolean; onClick: () => void; name: string }> = ({
+  active,
+  onClick,
+  name,
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-pressed={active}
+    aria-label={`${active ? 'Turn off' : 'Turn on'} ${name}`}
+    className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 border transition-colors whitespace-nowrap cursor-pointer ${
+      active
+        ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+    }`}
+  >
+    <Check className="w-3.5 h-3.5" />
+    <span>{active ? 'On' : 'Off'}</span>
+  </button>
+);
+
+const StatusLine: React.FC<{ entry: SourceReport | undefined; month: string | null }> = ({
+  entry,
+  month,
+}) =>
+  entry ? (
+    <p className={`text-xs mt-1 ${STATUS_TEXT[entry.status].classes}`}>
+      {STATUS_TEXT[entry.status].label}
+      {month ? ` for ${month}` : ''}
+      {entry.status !== 'used' && entry.reason ? `: ${entry.reason}` : ''}
+    </p>
+  ) : null;
+
 export const SourcesManager: React.FC<SourcesManagerProps> = ({
-  sources,
-  operatingTimezone,
-  onToggleSource,
-  onChangeWeight,
-  onAddSuggestedSource,
+  settings,
+  onChange,
+  backendUrl,
+  report,
+  reportMonth,
   onExtractLiveText,
   isSynthesizing,
 }) => {
-  const [filterType, setFilterType] = useState<'all' | SourceType>('all');
-  const [showSuggestModal, setShowSuggestModal] = useState(false);
+  const [curated, setCurated] = useState<CuratedSource[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [newUrl, setNewUrl] = useState('');
+  const [addError, setAddError] = useState<string | null>(null);
   const [livePasteText, setLivePasteText] = useState('');
 
-  // Suggest Source form state
-  const [newName, setNewName] = useState('');
-  const [newAuthor, setNewAuthor] = useState('');
-  const [newType, setNewType] = useState<SourceType>('column');
-  const [newUrl, setNewUrl] = useState('');
-  const [newTimezone, setNewTimezone] = useState('America/New_York');
-  const [newPublishHour, setNewPublishHour] = useState(8);
-  const [newExtract, setNewExtract] = useState('');
-  const [newFocusDims, setNewFocusDims] = useState<EnergyDimension[]>([
-    'mental',
-    'creative',
-  ]);
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoadError(null);
+    fetchCuratedSources(backendUrl, controller.signal)
+      .then(setCurated)
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setLoadError(
+          err instanceof TypeError
+            ? 'Cannot reach the server to load the default sources.'
+            : err?.message || 'The default sources could not be loaded.'
+        );
+      });
+    return () => controller.abort();
+  }, [backendUrl]);
 
-  const filteredSources =
-    filterType === 'all'
-      ? sources
-      : sources.filter((s) => s.type === filterType);
+  const activeUser = settings.user.filter((s) => s.active);
+  const exclusive = activeUser.length > 0;
+  const statusOf = (id: string) => report?.find((entry) => entry.id === id);
 
-  const toggleFocusDim = (dim: EnergyDimension) => {
-    setNewFocusDims((prev) =>
-      prev.includes(dim)
-        ? prev.length > 1
-          ? prev.filter((d) => d !== dim)
-          : prev
-        : [...prev, dim]
-    );
-  };
+  const toggleCurated = (id: string) =>
+    onChange((prev) => ({
+      ...prev,
+      disabledCurated: prev.disabledCurated.includes(id)
+        ? prev.disabledCurated.filter((x) => x !== id)
+        : [...prev.disabledCurated, id],
+    }));
 
-  const handleSuggestSubmit = (e: React.FormEvent) => {
+  const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newAuthor.trim()) return;
-
-    const created: HoroscopeSource = {
-      id: `src-community-${Date.now()}`,
-      name: newName.trim(),
-      author: newAuthor.trim(),
-      type: newType,
-      url: newUrl.trim() || 'https://astrology.community/feed',
-      sourceTimezone: newTimezone,
-      publishedHourNative: newPublishHour,
-      weight: 1.5,
-      isActive: true,
-      sampleExtract:
-        newExtract.trim() ||
-        'Planetary transits emphasize deliberate pacing during morning hours while opening favorable afternoon windows for strategic execution and creative collaboration.',
-      focusDimensions: newFocusDims,
-      lastCrawledUtc: new Date().toISOString(),
-      isCommunitySuggested: true,
-    };
-
-    onAddSuggestedSource(created);
-    setNewName('');
-    setNewAuthor('');
+    const url = normalizeSourceUrl(newUrl);
+    if (!url) {
+      setAddError('Enter a web address such as https://example.com/monthly-horoscope.');
+      return;
+    }
+    if (settings.user.some((s) => sourceUrlKey(s.url) === sourceUrlKey(url))) {
+      setAddError('That source is already in your list.');
+      return;
+    }
+    if (settings.user.length >= MAX_USER_SOURCES) {
+      setAddError(`You can add up to ${MAX_USER_SOURCES} sources.`);
+      return;
+    }
+    const id = `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    onChange((prev) => ({ ...prev, user: [...prev.user, { id, url, active: true }] }));
     setNewUrl('');
-    setNewExtract('');
-    setShowSuggestModal(false);
+    setAddError(null);
   };
 
   return (
     <div className="space-y-6">
-      {/* Top Control Card */}
       <div className="rounded-2xl bg-[#10172A] border border-slate-800/80 p-5 sm:p-6">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
-          <div>
-            <div className="text-xs text-slate-400">
-              <span>Crawled Horoscope Feeds &amp; Timezone Standardization</span>
-              <span className="mx-2" aria-hidden="true">·</span>
-              <span>
-                {sources.filter((s) => s.isActive).length} of {sources.length} Sources Active
-              </span>
-            </div>
-            <h2 className="text-lg sm:text-xl font-semibold text-slate-100 mt-1">
-              Customize Report Sources &amp; Extraction Weights
-            </h2>
+        <div className="pb-5 border-b border-slate-800/80">
+          <div className="text-xs text-slate-400">
+            Where your forecast comes from · English sources
           </div>
+          <h2 className="text-lg sm:text-xl font-semibold text-slate-100 mt-1">Your sources</h2>
+          <p className="text-xs text-slate-400 mt-1 max-w-3xl">
+            Add astrologers you trust: a page with a monthly horoscope, a whole site, or a YouTube
+            channel that publishes a monthly video. If you add any, only yours are used.
+          </p>
+        </div>
 
-          <button
-            onClick={() => setShowSuggestModal(true)}
-            className="min-h-[42px] px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold flex items-center gap-2 transition-colors self-start cursor-pointer"
+        {exclusive && (
+          <p
+            role="status"
+            className="mt-4 px-4 py-3 rounded-xl bg-violet-500/15 border border-violet-400/40 text-xs text-violet-100"
           >
-            <Plus className="w-4 h-4 shrink-0" />
-            <span>Suggest New Source</span>
+            Only your sources are used. The default sources below are ignored while one of yours is
+            switched on.
+          </p>
+        )}
+
+        <form onSubmit={handleAdd} className="mt-4 flex flex-col sm:flex-row gap-2">
+          <label htmlFor="new-source-url" className="sr-only">
+            Address of a source
+          </label>
+          <input
+            id="new-source-url"
+            type="text"
+            inputMode="url"
+            value={newUrl}
+            onChange={(e) => {
+              setNewUrl(e.target.value);
+              setAddError(null);
+            }}
+            placeholder="https://example.com/monthly-horoscope or a YouTube channel"
+            className="flex-1 h-11 px-3.5 rounded-xl bg-[#080B14] border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
+          />
+          <button
+            type="submit"
+            className="min-h-[44px] px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold flex items-center justify-center gap-2 transition-colors whitespace-nowrap cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            Add source
           </button>
-        </div>
+        </form>
+        {addError && (
+          <p role="alert" className="mt-1.5 text-xs text-rose-300">
+            {addError}
+          </p>
+        )}
 
-        {/* Source Type Filter Bar */}
-        <div className="mt-4 flex flex-wrap items-center gap-1.5">
-          {(['all', 'column', 'newspaper', 'blog', 'video'] as const).map(
-            (type) => (
-              <button
-                key={type}
-                onClick={() => setFilterType(type)}
-                className={`min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  filterType === type
-                    ? 'bg-slate-800 text-amber-300 border border-slate-700'
-                    : 'bg-[#080B14] text-slate-400 hover:text-slate-200 border border-slate-800/80'
+        {settings.user.length > 0 && (
+          <ul className="mt-4 divide-y divide-slate-800/80">
+            {settings.user.map((source) => (
+              <li
+                key={source.id}
+                className={`py-3 flex items-start justify-between gap-3 ${
+                  source.active ? '' : 'opacity-55'
                 }`}
               >
-                {type === 'all'
-                  ? `All Sources (${sources.length})`
-                  : SOURCE_TYPE_LABELS[type]}
-              </button>
-            )
-          )}
+                <div className="min-w-0">
+                  <a
+                    href={source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-slate-100 hover:underline break-all"
+                  >
+                    {source.url}
+                  </a>
+                  <p className="text-xs text-slate-400 mt-0.5">{describeUserSource(source.url)}</p>
+                  {source.active && <StatusLine entry={statusOf(source.id)} month={reportMonth} />}
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <SourceToggle
+                    active={source.active}
+                    name={source.url}
+                    onClick={() =>
+                      onChange((prev) => ({
+                        ...prev,
+                        user: prev.user.map((s) =>
+                          s.id === source.id ? { ...s, active: !s.active } : s
+                        ),
+                      }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChange((prev) => ({
+                        ...prev,
+                        user: prev.user.filter((s) => s.id !== source.id),
+                      }))
+                    }
+                    aria-label={`Remove ${source.url}`}
+                    className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-300 hover:bg-slate-800/60 cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div
+        className={`rounded-2xl bg-[#10172A] border border-slate-800/80 p-5 sm:p-6 ${
+          exclusive ? 'opacity-60' : ''
+        }`}
+      >
+        <div className="pb-4 border-b border-slate-800/80">
+          <h3 className="text-base font-semibold text-slate-100">Default sources</h3>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Read directly each time you generate a forecast. If fewer than two have something for
+            the month, the open web is searched as well.
+          </p>
         </div>
 
-        {/* Source Cards List */}
-        <div className="mt-5 divide-y divide-slate-800/80">
-          {filteredSources.map((src) => {
-            const { utcHour } = normalizeSourceHourToUtc(
-              src.publishedHourNative,
-              src.sourceTimezone
-            );
-            const { localHour, dayShiftFromUtcToLocal } =
-              projectUtcHourToUserLocal(utcHour, operatingTimezone);
-
-            return (
-              <div
-                key={src.id}
-                className={`py-5 first:pt-2 last:pb-1 transition-opacity ${
-                  src.isActive ? '' : 'opacity-55'
-                }`}
-              >
-                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                  <div className="space-y-1.5 flex-1">
-                    {/* Unboxed inline metadata */}
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
-                      <span className="text-amber-300 font-medium">
-                        {SOURCE_TYPE_LABELS[src.type]}
-                      </span>
-                      <span aria-hidden="true">·</span>
-                      <span>By {src.author}</span>
-                      <span aria-hidden="true">·</span>
-                      <span className="font-mono text-cyan-300">
-                        Source TZ: {src.sourceTimezone} ({formatTimezoneBadge(src.sourceTimezone)})
-                      </span>
-                      {src.isCommunitySuggested && (
-                        <>
-                          <span aria-hidden="true">·</span>
-                          <span className="text-emerald-300 font-medium">
-                            Community Verified
-                          </span>
-                        </>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2.5">
-                      <h3 className="text-base font-semibold text-slate-100">
-                        {src.name}
-                      </h3>
+        {loadError ? (
+          <p role="alert" className="mt-4 text-xs text-rose-300">
+            {loadError}
+          </p>
+        ) : curated === null ? (
+          <p className="mt-4 text-xs text-slate-400">Loading…</p>
+        ) : (
+          <ul className="divide-y divide-slate-800/80">
+            {curated.map((source) => {
+              const active = !settings.disabledCurated.includes(source.id);
+              const Icon = source.type === 'video' ? Video : Globe;
+              return (
+                <li
+                  key={source.id}
+                  className={`py-4 flex items-start justify-between gap-3 ${
+                    active ? '' : 'opacity-55'
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Icon className="w-4 h-4 text-amber-300 shrink-0" aria-hidden="true" />
+                      <span className="text-sm font-semibold text-slate-100">{source.name}</span>
                       <a
-                        href={src.url}
+                        href={source.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-slate-500 hover:text-slate-300 transition-colors"
-                        title={`Source URL: ${src.url}`}
+                        aria-label={`Open ${source.name}`}
+                        className="text-slate-500 hover:text-slate-300"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     </div>
-
-                    <p className="text-sm text-slate-300 leading-relaxed">
-                      &ldquo;{src.sampleExtract}&rdquo;
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      By {source.author} · {source.cadence}
                     </p>
-
-                    {/* Timezone Conversion Chain */}
-                    <div className="pt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-mono text-slate-400">
-                      <Globe className="w-3.5 h-3.5 text-violet-400 shrink-0" />
-                      <span>
-                        Native Dispatch: {formatHourDecimal(src.publishedHourNative)} ({src.sourceTimezone.split('/').pop()})
-                      </span>
-                      <span className="text-slate-600" aria-hidden="true">→</span>
-                      <span className="text-violet-300">
-                        Normalized: {formatHourDecimal(utcHour)} UTC
-                      </span>
-                      <span className="text-slate-600" aria-hidden="true">→</span>
-                      <span className="text-amber-200">
-                        Your Local: {formatHourDecimal(localHour)} ({operatingTimezone.split('/').pop()})
-                        {dayShiftFromUtcToLocal !== 0
-                          ? ` [${dayShiftFromUtcToLocal > 0 ? '+1d' : '-1d'}]`
-                          : ''}
-                      </span>
-                    </div>
-
-                    {/* Focus Dimensions */}
-                    <div className="pt-1 flex flex-wrap items-center gap-x-2 text-xs text-slate-400">
-                      <span>Extracted Parameters:</span>
-                      {src.focusDimensions.map((dim, idx) => (
-                        <React.Fragment key={dim}>
-                          <span style={{ color: ENERGY_DIMENSIONS_METADATA[dim].color }}>
-                            {ENERGY_DIMENSIONS_METADATA[dim].shortLabel}
-                          </span>
-                          {idx < src.focusDimensions.length - 1 && (
-                            <span aria-hidden="true">·</span>
-                          )}
-                        </React.Fragment>
-                      ))}
-                    </div>
+                    {active && !exclusive && (
+                      <StatusLine entry={statusOf(source.id)} month={reportMonth} />
+                    )}
                   </div>
-
-                  {/* Right Controls: Active Toggle & Weight Multiplier */}
-                  <div className="flex sm:flex-row lg:flex-col items-start sm:items-center lg:items-end justify-between gap-3 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-800/60">
-                    <button
-                      onClick={() => onToggleSource(src.id)}
-                      className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 border transition-colors cursor-pointer ${
-                        src.isActive
-                          ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>{src.isActive ? 'Included in Report' : 'Excluded'}</span>
-                    </button>
-
-                    <div className="flex items-center gap-1.5">
-                      <Sliders className="w-3.5 h-3.5 text-slate-500 mr-1" />
-                      <span className="text-xs text-slate-400 mr-1">Weight:</span>
-                      {[0.5, 1.0, 1.5, 2.0].map((w) => (
-                        <button
-                          key={w}
-                          onClick={() => onChangeWeight(src.id, w)}
-                          disabled={!src.isActive}
-                          className={`min-h-[32px] px-2 py-1 rounded-md font-mono text-xs transition-colors cursor-pointer disabled:opacity-40 ${
-                            Math.abs(src.weight - w) < 0.1
-                              ? 'bg-amber-500 text-slate-950 font-semibold'
-                              : 'bg-[#080B14] border border-slate-800 text-slate-400 hover:text-slate-200'
-                          }`}
-                        >
-                          {w.toFixed(1)}x
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                  <SourceToggle
+                    active={active}
+                    name={source.name}
+                    onClick={() => toggleCurated(source.id)}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
-      {/* Live Horoscope Column / Transcript Extractor */}
       <div className="rounded-2xl bg-[#10172A] border border-slate-800/80 p-5 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-800/80">
-          <div>
-            <div className="text-xs text-slate-400">
-              On-Demand Column, Blog &amp; Video Transcript Parser
-            </div>
-            <h3 className="text-base font-semibold text-slate-100 mt-0.5">
-              Include a Custom Horoscope Excerpt in Your Monthly Forecast
-            </h3>
-          </div>
-          <span className="text-xs font-mono text-violet-300">
-            Auto-Normalizes to UTC → {operatingTimezone}
-          </span>
+        <div className="pb-4 border-b border-slate-800/80">
+          <h3 className="text-base font-semibold text-slate-100">
+            Add a pasted excerpt to your next forecast
+          </h3>
+          <p className="text-xs text-slate-400 mt-0.5">
+            The text is passed to the forecast writer as extra context. It cannot be cited, so it
+            never creates an event on its own.
+          </p>
         </div>
 
         <div className="mt-4 space-y-3">
+          <label htmlFor="excerpt-text" className="sr-only">
+            Excerpt
+          </label>
           <textarea
+            id="excerpt-text"
             rows={3}
+            maxLength={8000}
             value={livePasteText}
             onChange={(e) => setLivePasteText(e.target.value)}
-            placeholder="Paste any horoscope paragraph, newspaper column snippet, or YouTube astrologer transcript with transit times (e.g., 'Mercury trine Jupiter at 11:00 AM EST opens a breakthrough career window, but avoid financial speculation after 4:00 PM EST')..."
+            placeholder="Paste a paragraph from a horoscope, a newsletter or a video transcript"
             className="w-full p-3.5 rounded-xl bg-[#080B14] border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
           />
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-xs text-slate-400">
-              Pasted excerpts are sent to the forecast agent as supplementary untrusted context — they are not crawled or verified by Tavily.
-            </p>
+          <div className="flex justify-end">
             <button
               onClick={() => {
                 if (livePasteText.trim()) {
@@ -334,190 +343,11 @@ export const SourcesManager: React.FC<SourcesManagerProps> = ({
               className="min-h-[42px] px-4 py-2 rounded-xl bg-violet-500 hover:bg-violet-400 text-white text-xs font-semibold flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-40"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>{isSynthesizing ? 'Extracting...' : 'Extract & Correlate Now'}</span>
+              <span>{isSynthesizing ? 'Generating...' : 'Generate forecast with this excerpt'}</span>
             </button>
           </div>
         </div>
       </div>
-
-      {/* Suggest a New Source Modal */}
-      {showSuggestModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-[#10172A] border border-slate-800 p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <div>
-                <h3 className="text-base font-semibold text-slate-100">
-                  Suggest Additional Horoscope Source
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Community-suggested sources are normalized to UTC and made available to all users.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowSuggestModal(false)}
-                className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer"
-                aria-label="Close modal"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSuggestSubmit} className="mt-4 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                    Publication / Channel Name
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder="e.g., Café Astrology Daily"
-                    className="w-full h-11 px-3.5 rounded-xl bg-[#080B14] border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                    Astrologer / Author
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newAuthor}
-                    onChange={(e) => setNewAuthor(e.target.value)}
-                    placeholder="e.g., Annie Heese"
-                    className="w-full h-11 px-3.5 rounded-xl bg-[#080B14] border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                    Source Format
-                  </label>
-                  <select
-                    value={newType}
-                    onChange={(e) => setNewType(e.target.value as SourceType)}
-                    className="w-full h-11 px-3 rounded-xl bg-[#080B14] border border-slate-800 text-sm text-slate-100 focus:outline-none focus:border-amber-400"
-                  >
-                    <option value="column">Astrology Column</option>
-                    <option value="newspaper">Newspaper Horoscope</option>
-                    <option value="blog">Astrology Blog</option>
-                    <option value="video">YouTube Video Channel</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                    Source Native Timezone
-                  </label>
-                  <select
-                    value={newTimezone}
-                    onChange={(e) => setNewTimezone(e.target.value)}
-                    className="w-full h-11 px-3 rounded-xl bg-[#080B14] border border-slate-800 text-sm text-slate-100 font-mono focus:outline-none focus:border-amber-400"
-                  >
-                    {TIMEZONE_OPTIONS.map((tz) => (
-                      <option key={tz.id} value={tz.id}>
-                        {tz.city} ({tz.id})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                    Source URL / Feed Link
-                  </label>
-                  <input
-                    type="url"
-                    value={newUrl}
-                    onChange={(e) => setNewUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="w-full h-11 px-3.5 rounded-xl bg-[#080B14] border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                    Typical Publish Hour (Source TZ)
-                  </label>
-                  <select
-                    value={newPublishHour}
-                    onChange={(e) => setNewPublishHour(Number(e.target.value))}
-                    className="w-full h-11 px-3 rounded-xl bg-[#080B14] border border-slate-800 text-sm text-slate-100 font-mono focus:outline-none focus:border-amber-400"
-                  >
-                    {Array.from({ length: 24 }, (_, i) => (
-                      <option key={i} value={i}>
-                        {String(i).padStart(2, '0')}:00 ({newTimezone.split('/').pop()})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  Primary Energy Dimensions Covered
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {(Object.keys(ENERGY_DIMENSIONS_METADATA) as EnergyDimension[]).map(
-                    (dim) => {
-                      const active = newFocusDims.includes(dim);
-                      return (
-                        <button
-                          type="button"
-                          key={dim}
-                          onClick={() => toggleFocusDim(dim)}
-                          className={`min-h-[34px] px-3 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                            active
-                              ? 'bg-amber-500/20 border border-amber-400/50 text-amber-200'
-                              : 'bg-[#080B14] border border-slate-800 text-slate-400'
-                          }`}
-                        >
-                          {ENERGY_DIMENSIONS_METADATA[dim].shortLabel}
-                        </button>
-                      );
-                    }
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                  Sample Horoscope / Transit Dispatch Excerpt
-                </label>
-                <textarea
-                  rows={3}
-                  value={newExtract}
-                  onChange={(e) => setNewExtract(e.target.value)}
-                  placeholder="Paste a recent forecast excerpt to initialize source extraction..."
-                  className="w-full p-3 rounded-xl bg-[#080B14] border border-slate-800 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowSuggestModal(false)}
-                  className="min-h-[42px] px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="min-h-[42px] px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold transition-colors cursor-pointer"
-                >
-                  Add &amp; Verify Source
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

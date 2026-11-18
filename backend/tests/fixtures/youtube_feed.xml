@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <id>yt:channel:II6kihNiLhgxgO6kzXnyPw</id>
+ <title>Written in the Stars by Rux</title>
+ <entry>
+  <yt:videoId>shortAAAAAA</yt:videoId>
+  <title>November '26 Monthly Horoscope in one minute #astrology</title>
+  <link rel="alternate" href="https://www.youtube.com/shorts/shortAAAAAA"/>
+  <published>2026-11-14T10:58:18+00:00</published>
+  <media:group><media:description>A short.</media:description></media:group>
+ </entry>
+ <entry>
+  <yt:videoId>newmoonAAAA</yt:videoId>
+  <title>NEW MOON IN SCORPIO 9 November All Signs Update: Follow the Money</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=newmoonAAAA"/>
+  <published>2026-11-05T10:00:00+00:00</published>
+  <media:group><media:description>00:00:00 Intro
+00:05:00 Aries</media:description></media:group>
+ </entry>
+ <entry>
+  <yt:videoId>nov26AAAAAA</yt:videoId>
+  <title>NOVEMBER '26 MONTHLY HOROSCOPE All Signs: Venus &amp; Mercury Go Direct</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=nov26AAAAAA"/>
+  <published>2026-10-28T17:30:03+00:00</published>
+  <media:group><media:description>Book a reading: https://example.com/reading
+Timestamps for each sign:
+00:00:00 Intro
+00:01:00 Aries
+00:02:00 Libra
+00:03:00 Scorpio
+00:04:00 Sagittarius</media:description></media:group>
+ </entry>
+ <entry>
+  <yt:videoId>oct26AAAAAA</yt:videoId>
+  <title>OCTOBER '26 MONTHLY HOROSCOPE All Signs: Venus and Mercury Go Retrograde</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=oct26AAAAAA"/>
+  <published>2026-09-28T17:30:03+00:00</published>
+  <media:group><media:description>00:00 Intro
+01:00 Aries</media:description></media:group>
+ </entry>
+ <entry>
+  <yt:videoId>nov25AAAAAA</yt:videoId>
+  <title>NOVEMBER 2025 MONTHLY HOROSCOPE All Signs</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=nov25AAAAAA"/>
+  <published>2025-10-28T17:30:03+00:00</published>
+  <media:group><media:description>00:00 Intro</media:description></media:group>
+ </entry>
+</feed>

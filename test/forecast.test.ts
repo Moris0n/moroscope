@@ -2,21 +2,34 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  cleanLifeContext,
   defaultTargetMonth,
+  isLegacyProfile,
   isValidBackendUrl,
   isValidForecastShape,
   mergeProfileWithDefaults,
+  normalizeSourceUrl,
   parseMonthRange,
+  primarySign,
+  profileProblem,
+  profileRequestBody,
+  reviveSourceSettings,
+  sourcesRequestBody,
+  toGeneralProfile,
+  toggleKidsStage,
 } from '../src/utils/forecastShared.ts';
 import {
   SseParser,
   buildMonthlyHeatmap,
+  parseForecastPayload,
   readForecastSseStream,
+  sourceLabel,
 } from '../src/utils/forecastHelpers.ts';
 import { applyChart, chartBasis } from '../src/utils/chart.ts';
 import { TransitEvent, UserProfile } from '../src/types/astrology.ts';
 
 const VALID_PROFILE: UserProfile = {
+  mode: 'personal',
   name: 'Test User',
   birthDate: '1994-10-17',
   birthTime: '08:45',
@@ -338,4 +351,160 @@ test('mergeProfileWithDefaults never pairs the default place or chart with saved
   assert.equal(corrupt.chart, undefined);
 
   assert.deepEqual(mergeProfileWithDefaults(defaults, null).birthPlace, place);
+});
+
+test('a general profile sends only its sign, month and topics', () => {
+  const general = toGeneralProfile(
+    { ...VALID_PROFILE, lifeContext: { work: 'jobSeeking' } },
+    'Scorpio'
+  );
+  assert.equal(general.name, '');
+  assert.equal(general.birthDate, '');
+  assert.equal(general.lifeContext, undefined);
+  assert.equal(general.risingSign, undefined);
+  assert.deepEqual(primarySign(general), { sign: 'Scorpio', kind: 'chosen' });
+  assert.deepEqual(profileRequestBody(general), {
+    mode: 'general',
+    sunSign: 'Scorpio',
+    targetMonth: 'November 2026',
+    priorities: ['careerTransition', 'financialPlanning'],
+  });
+  assert.equal(profileProblem(general), null);
+  // Even with leftover fields, nothing else is sent.
+  const leftovers = profileRequestBody({ ...VALID_PROFILE, mode: 'general' });
+  assert.deepEqual(Object.keys(leftovers).sort(), ['mode', 'priorities', 'sunSign', 'targetMonth']);
+});
+
+test('a personal profile sends cleaned life context only with a forecast', () => {
+  const profile: UserProfile = {
+    ...VALID_PROFILE,
+    birthPlace: { label: 'X', lat: 1, lon: 2, tz: 'America/New_York' },
+    lifeContext: {
+      work: 'jobSeeking',
+      kids: [],
+      lookingForPartner: false,
+      goals: '  New job  ',
+      upcomingEvents: [
+        { date: '2026-11-16', label: ' Interview ' },
+        { date: '', label: 'half-filled row' },
+      ],
+    },
+  };
+  const body = profileRequestBody(profile);
+  assert.deepEqual(body.lifeContext, {
+    work: 'jobSeeking',
+    goals: 'New job',
+    upcomingEvents: [{ date: '2026-11-16', label: 'Interview' }],
+  });
+  for (const key of ['backendUrl', 'chart', 'birthPlace']) assert.equal(key in body, false);
+  assert.equal(body.name, 'Test User');
+  assert.equal('lifeContext' in profileRequestBody(profile, { lifeContext: false }), false);
+  assert.equal('lifeContext' in profileRequestBody({ ...profile, lifeContext: { kids: [] } }), false);
+  assert.deepEqual(primarySign(profile), { sign: 'Scorpio', kind: 'rising' });
+  assert.deepEqual(primarySign({ ...profile, hasExactTime: false }), { sign: 'Libra', kind: 'sun' });
+  assert.match(profileProblem({ ...profile, birthDate: '' })!, /birth date/);
+  assert.equal(profileProblem(profile), null);
+});
+
+test('cleanLifeContext drops unknown answers and keeps half-typed rows while editing', () => {
+  const messy = {
+    relationship: 'royal',
+    work: 'student',
+    kids: ['teens', 'teens', 'aliens'],
+    healthFocus: 'sleep',
+    caringForParents: true,
+    goals: 'x'.repeat(600),
+    upcomingEvents: [{ date: '', label: '' }, 'nope'],
+    extra: 1,
+  };
+  const sent = cleanLifeContext(messy);
+  assert.deepEqual(Object.keys(sent).sort(), ['caringForParents', 'goals', 'kids', 'work']);
+  assert.deepEqual(sent.kids, ['teens']);
+  assert.equal(sent.goals!.length, 500);
+  assert.deepEqual(cleanLifeContext(messy, false).upcomingEvents, [{ date: '', label: '' }]);
+  assert.deepEqual(cleanLifeContext(null), {});
+});
+
+test('stored profiles: legacy ones are personal and onboarded, modes and life context survive', () => {
+  const defaults: UserProfile = { ...VALID_PROFILE, mode: 'general', name: '', birthDate: '' };
+  const legacy = { name: 'Old User', birthDate: '1990-01-15', sunSign: 'Capricorn' };
+  assert.equal(isLegacyProfile(legacy), true);
+  assert.equal(isLegacyProfile({ ...legacy, mode: 'personal' }), false);
+  assert.equal(isLegacyProfile(null), false);
+  assert.equal(mergeProfileWithDefaults(defaults, legacy).mode, 'personal');
+
+  const stored = { mode: 'general', sunSign: 'Leo', birthDate: '' };
+  const general = mergeProfileWithDefaults(defaults, stored);
+  assert.equal(general.mode, 'general');
+  assert.equal(general.birthDate, '');
+  assert.equal(mergeProfileWithDefaults(defaults, { mode: 'weird' }).mode, 'general');
+
+  const personal = mergeProfileWithDefaults(defaults, {
+    mode: 'personal',
+    lifeContext: { work: 'retired', moneyFocus: 'lottery' },
+  });
+  assert.deepEqual(personal.lifeContext, { work: 'retired' });
+});
+
+test('source addresses are normalised, deduplicated and bounded', () => {
+  assert.equal(normalizeSourceUrl(' example.com/monthly '), 'https://example.com/monthly');
+  assert.equal(normalizeSourceUrl('http://Example.com#top'), 'http://example.com/');
+  for (const bad of ['', 'not a url', 'ftp://x.example', 'https://u:p@x.example', 'localhost', 'javascript:alert(1)']) {
+    assert.equal(normalizeSourceUrl(bad), null, bad);
+  }
+
+  const revived = reviveSourceSettings({
+    disabledCurated: ['astrostyle', 5],
+    user: [
+      { id: 'a', url: 'https://www.site.example/monthly/', active: true },
+      { id: 'b', url: 'https://site.example/monthly', active: true },
+      { id: 'c', url: 'https://other.example', active: false },
+      { id: '', url: 'https://noid.example' },
+      { id: 'd', url: 'nope nope' },
+      'junk',
+    ],
+  });
+  assert.deepEqual(revived.disabledCurated, ['astrostyle']);
+  assert.deepEqual(revived.user.map((s) => [s.id, s.active]), [['a', true], ['c', false]]);
+  assert.deepEqual(reviveSourceSettings('old fake list'), { disabledCurated: [], user: [] });
+  assert.deepEqual(reviveSourceSettings([{ id: 'src-astrology-zone' }]), { disabledCurated: [], user: [] });
+  assert.equal(sourcesRequestBody(revived, true).includeCurated, true);
+  assert.equal(sourcesRequestBody(revived).includeCurated, false);
+});
+
+test('forecast payload extras are parsed defensively and cited URLs get source names', () => {
+  const payload = parseForecastPayload({
+    result: {},
+    profileId: 7,
+    evidence: { mode: 'user', gap: true },
+    sources: [
+      { id: 'rux-youtube', name: 'Rux', url: 'https://www.youtube.com/@Rux', origin: 'curated', status: 'used', documents: 2 },
+      { id: 'x', name: 'Bad', url: 'javascript:alert(1)', origin: 'user', status: 'failed', reason: 'HTTP 404' },
+      { id: 'y', name: 'Unknown status', url: '', origin: 'user', status: 'exploded' },
+      'junk',
+    ],
+  });
+  assert.equal(payload.profileId, null);
+  assert.deepEqual(payload.evidence, { mode: 'user', gap: true });
+  assert.deepEqual(payload.sources.map((s) => [s.id, s.url]), [
+    ['rux-youtube', 'https://www.youtube.com/@Rux'],
+    ['x', ''],
+  ]);
+  assert.equal(parseForecastPayload({}).evidence, null);
+  assert.deepEqual(parseForecastPayload({ evidence: { mode: 'magic', gap: false } }).sources, []);
+
+  const { sources } = payload;
+  assert.equal(sourceLabel('https://www.youtube.com/watch?v=abc&t=12456s', sources), 'Rux (at 3:27:36)');
+  assert.equal(sourceLabel('https://www.youtube.com/watch?v=abc', sources), 'Rux');
+  assert.equal(sourceLabel('https://www.astrostyle.com/horoscopes/', sources), 'astrostyle.com');
+  assert.equal(sourceLabel('not a url', sources), 'not a url');
+});
+
+test('children answers: "No children" excludes having children but not trying for one', () => {
+  assert.deepEqual(toggleKidsStage([], 'none'), ['none']);
+  assert.deepEqual(toggleKidsStage(['none'], 'trying'), ['none', 'trying']);
+  assert.deepEqual(toggleKidsStage(['none', 'trying'], 'under5'), ['trying', 'under5']);
+  assert.deepEqual(toggleKidsStage(['trying', 'under5', 'teens'], 'none'), ['trying', 'none']);
+  assert.deepEqual(toggleKidsStage(['none'], 'none'), []);
+  assert.deepEqual(cleanLifeContext({ kids: ['none', 'trying'] }).kids, ['none', 'trying']);
 });

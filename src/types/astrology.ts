@@ -76,7 +76,58 @@ export interface NatalChart {
   basis: string; // the birth data this chart was calculated from
 }
 
+export type ProfileMode = 'general' | 'personal';
+
+export type RelationshipStatus =
+  | 'single'
+  | 'dating'
+  | 'inRelationship'
+  | 'married'
+  | 'separated'
+  | 'complicated';
+
+export type WorkStatus =
+  | 'employed'
+  | 'jobSeeking'
+  | 'consideringChange'
+  | 'selfEmployed'
+  | 'student'
+  | 'parentalLeave'
+  | 'retired';
+
+export type MoneyFocus = 'saving' | 'bigPurchase' | 'investing' | 'debt';
+export type KidsStage =
+  | 'none'
+  | 'trying'
+  | 'expecting'
+  | 'under5'
+  | 'age5to12'
+  | 'teens'
+  | 'adult';
+export type HealthFocus = 'fitness' | 'sleep' | 'stress' | 'nutrition' | 'habit';
+
+export interface UpcomingEvent {
+  date: string; // YYYY-MM-DD
+  label: string;
+}
+
+// Every answer is optional. Sent to the forecast model in personal mode; never stored on the server.
+export interface LifeContext {
+  relationship?: RelationshipStatus;
+  lookingForPartner?: boolean;
+  work?: WorkStatus;
+  kids?: KidsStage[];
+  caringForParents?: boolean;
+  moneyFocus?: MoneyFocus;
+  healthFocus?: HealthFocus[];
+  goals?: string;
+  upcomingEvents?: UpcomingEvent[];
+}
+
 export interface UserProfile {
+  // 'general': only a sign is known (kept in sunSign). 'personal': birth data and life context.
+  mode: ProfileMode;
+  lifeContext?: LifeContext;
   name: string;
   birthDate: string; // YYYY-MM-DD
   birthTime: string; // HH:mm
@@ -96,6 +147,47 @@ export interface UserProfile {
   backendUrl: string;
 }
 
+export interface CuratedSource {
+  id: string;
+  name: string;
+  author: string;
+  type: 'video' | 'website';
+  url: string;
+  language: string;
+  cadence: string;
+}
+
+export interface UserSource {
+  id: string;
+  url: string;
+  active: boolean;
+}
+
+// The user's choices on the Sources tab. Active user sources are used instead of the default ones.
+export interface SourceSettings {
+  disabledCurated: string[];
+  user: UserSource[];
+}
+
+export type SourceStatus = 'used' | 'no_forecast' | 'failed';
+
+// What happened to one source while a forecast was generated.
+export interface SourceReport {
+  id: string;
+  name: string;
+  url: string;
+  origin: 'curated' | 'user' | 'web';
+  status: SourceStatus;
+  reason?: string;
+  documents: number;
+}
+
+export interface ForecastEvidence {
+  mode: 'user' | 'curated' | 'web';
+  gap: boolean; // true when no source had anything for the month
+}
+
+// Only used by the hidden energy charts (synthetic data).
 export interface HoroscopeSource {
   id: string;
   name: string;

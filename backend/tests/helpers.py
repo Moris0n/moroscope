@@ -58,6 +58,56 @@ TAVILY_RESULTS = [
 
 DEFAULT_QUERY = "scorpio rising november 2026 horoscope dates"
 
+FIXTURES = Path(__file__).parent / "fixtures"
+RUX_FEED_URL = "https://www.youtube.com/feeds/videos.xml?channel_id=UCII6kihNiLhgxgO6kzXnyPw"
+AZ_SCORPIO_URL = "https://www.astrologyzone.com/forecasts/scorpio-horoscope-for-november-2026/"
+CAFE_URL = "https://cafeastrology.com/thismonthinastrology.html"
+ASTROSTYLE_URL = "https://astrostyle.com/horoscopes/monthly/scorpio/"
+SALLY_URL = "https://sallykirkman.com/scorpio-horoscope-november-2026/"
+RUX_VIDEO_URL = "https://www.youtube.com/watch?v=nov26AAAAAA"
+RUX_SCORPIO_URL = f"{RUX_VIDEO_URL}&t=180s"
+
+# One cue every 20 seconds; the chapters of the fixture video start on the minute.
+TRANSCRIPT = [
+    (0.0, "hello everybody this is the general overview"),
+    (20.0, "the new moon is on the 9th of november"),
+    (60.0, "my dear aries"),
+    (120.0, "my dear libras"),
+    (180.0, "my dear scorpios"),
+    (200.0, "on the 13th of november mercury and venus turn direct"),
+    (240.0, "my dear sagittarians"),
+]
+
+
+def fixture(name: str) -> str:
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def source_pages() -> dict[str, str]:
+    """Every curated source with a forecast for Scorpio, November 2026."""
+    return {
+        RUX_FEED_URL: fixture("youtube_feed.xml"),
+        CAFE_URL: fixture("cafe_astrology.html"),
+        "https://www.astrologyzone.com/horoscopes/": fixture("astrology_zone_index.html"),
+        AZ_SCORPIO_URL: fixture("astrology_zone_scorpio_1.html"),
+        f"{AZ_SCORPIO_URL}2/": fixture("astrology_zone_scorpio_2.html"),
+        f"{AZ_SCORPIO_URL}3/": fixture("astrology_zone_scorpio_3.html"),
+        ASTROSTYLE_URL: fixture("astrostyle_scorpio.html"),
+        "https://sallykirkman.com/scorpio-monthly-horoscopes/": fixture(
+            "sally_kirkman_listing.html"
+        ),
+        SALLY_URL: fixture("sally_kirkman_post.html"),
+    }
+
+
+def page_response(body: Any) -> httpx.Response:
+    if isinstance(body, httpx.Response):
+        return body
+    content_type = "text/xml" if body.lstrip().startswith("<?xml") else "text/html"
+    return httpx.Response(
+        200, content=body.encode(), headers={"content-type": f"{content_type}; charset=utf-8"}
+    )
+
 
 def valid_event(**overrides: Any) -> dict[str, Any]:
     return {
@@ -84,7 +134,12 @@ def nebius_response(content: Any) -> httpx.Response:
 
 
 class Upstream:
-    """Records upstream calls and answers them from a script."""
+    """Records upstream calls and answers them from a script.
+
+    `calls` holds the Nebius and Tavily calls. Source pages are served from `pages` (URL to HTML,
+    XML or a ready response) and recorded in `page_calls`; any other page is a 404, so without
+    `pages` no curated source is readable and the pipeline falls back to the web search.
+    """
 
     def __init__(
         self,
@@ -94,8 +149,11 @@ class Upstream:
         nebius_error: Exception | None = None,
         delay: float = 0.0,
         responder: Any = None,
+        pages: dict[str, Any] | None = None,
     ) -> None:
         self.calls: list[dict[str, Any]] = []
+        self.page_calls: list[str] = []
+        self.pages = pages or {}
         self.nebius_outputs = nebius_outputs or [{"query": DEFAULT_QUERY}, valid_forecast()]
         self.tavily_results = TAVILY_RESULTS if tavily_results is None else tavily_results
         self.nebius_status = nebius_status
@@ -106,6 +164,9 @@ class Upstream:
 
     async def __call__(self, request: httpx.Request) -> httpx.Response:
         url = str(request.url)
+        if request.method == "GET":
+            self.page_calls.append(url)
+            return page_response(self.pages.get(url, httpx.Response(404, text="not found")))
         body = json.loads(request.content) if request.content else None
         self.calls.append({"url": url, "body": body, "headers": request.headers})
         if self.delay:
@@ -127,6 +188,20 @@ class Upstream:
         return ["tavily" if "tavily" in call["url"] else "nebius" for call in self.calls]
 
 
+PRIVATE_HOSTS = {"intranet.example": "10.0.0.5", "metadata.example": "169.254.169.254"}
+
+
+async def fake_resolve(host: str) -> list[str]:
+    """DNS stand-in: every name is public except the ones in PRIVATE_HOSTS."""
+    return [PRIVATE_HOSTS.get(host, "93.184.216.34")]
+
+
+def fake_transcript(video_id: str) -> list[tuple[float, str]]:
+    if video_id != "nov26AAAAAA":
+        raise RuntimeError("no transcript")
+    return TRANSCRIPT
+
+
 def make_deps(
     upstream: Upstream | None = None, env: dict[str, str] | None = None, port: int = PORT
 ) -> PipelineDeps:
@@ -135,6 +210,9 @@ def make_deps(
         http=httpx.AsyncClient(transport=httpx.MockTransport(upstream or Upstream())),
         data_dir=Path(tempfile.mkdtemp(prefix="moroscope-profiles-")),
         allowed_hosts=local_allowed_hosts(port),
+        fetch_transcript=fake_transcript,
+        resolve_host=fake_resolve,
+        page_pause_seconds=0.0,
     )
 
 

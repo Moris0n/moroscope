@@ -4,14 +4,19 @@
  */
 
 import React, { useRef, useState } from 'react';
-import { HoroscopeSource, UserProfile } from './types/astrology';
-import { DEFAULT_SOURCES } from './utils/astrologyEngine';
+import { SourceSettings, UserProfile } from './types/astrology';
+import { getEffectiveChartSign } from './utils/astrologyEngine';
 import { detectLocalTimezone } from './utils/timezoneEngine';
 import {
   DEFAULT_BACKEND_URL,
+  DEFAULT_SOURCE_SETTINGS,
   defaultTargetMonth,
+  isLegacyProfile,
   isValidBackendUrl,
   mergeProfileWithDefaults,
+  profileProblem,
+  reviveSourceSettings,
+  toGeneralProfile,
 } from './utils/forecastShared';
 import {
   STORAGE_KEYS,
@@ -30,25 +35,22 @@ import { TransitHeatmapMatrix } from './components/TransitHeatmapMatrix';
 import { SourcesManager } from './components/SourcesManager';
 import { NatalProfilePanel } from './components/NatalProfilePanel';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { Onboarding, OnboardingStep } from './components/Onboarding';
 
+// Nothing is known about a new user: onboarding fills this in.
 const INITIAL_PROFILE: UserProfile = {
-  name: 'Elena Vance',
-  birthDate: '1994-10-17',
-  birthTime: '08:45',
-  hasExactTime: true,
-  birthLocation: 'New York City, New York, United States',
-  birthPlace: {
-    label: 'New York City, New York, United States',
-    lat: 40.7143,
-    lon: -74.006,
-    tz: 'America/New_York',
-  },
-  birthTimezone: 'America/New_York',
+  mode: 'general',
+  lifeContext: undefined,
+  name: '',
+  birthDate: '',
+  birthTime: '',
+  hasExactTime: false,
+  birthLocation: '',
+  birthTimezone: detectLocalTimezone(),
   operatingTimezone: detectLocalTimezone(),
-  sunSign: 'Libra',
+  sunSign: 'Aries',
   moonSign: 'Aries',
-  risingSign: 'Scorpio',
-  useRisingPrimary: true,
+  useRisingPrimary: false,
   activeCategories: [
     'career',
     'finance',
@@ -60,12 +62,22 @@ const INITIAL_PROFILE: UserProfile = {
     'rest',
   ],
   targetMonth: defaultTargetMonth(),
-  priorities: ['careerTransition', 'financialPlanning'],
+  priorities: [],
   backendUrl: DEFAULT_BACKEND_URL,
 };
 
 const reviveProfile = (saved: unknown) =>
   mergeProfileWithDefaults(INITIAL_PROFILE, saved);
+
+// Onboarding is done once it was completed here, or if a profile from before it existed is stored.
+function wasOnboarded(): boolean {
+  if (readStoredString(STORAGE_KEYS.ONBOARDED) === '1') return true;
+  try {
+    return isLegacyProfile(JSON.parse(readStoredString(STORAGE_KEYS.PROFILE) ?? 'null'));
+  } catch {
+    return false;
+  }
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -74,9 +86,14 @@ export default function App() {
     INITIAL_PROFILE,
     reviveProfile
   );
-  const [sources, setSources] = usePersistentState<HoroscopeSource[]>(
-    STORAGE_KEYS.SOURCES,
-    DEFAULT_SOURCES
+  const [sourceSettings, setSourceSettings] = usePersistentState<SourceSettings>(
+    STORAGE_KEYS.SOURCE_SETTINGS,
+    DEFAULT_SOURCE_SETTINGS,
+    reviveSourceSettings
+  );
+  // Which onboarding screen is open, if any. 'birth' is the "Personalise my forecast" entry.
+  const [onboarding, setOnboarding] = useState<OnboardingStep | null>(() =>
+    wasOnboarded() ? null : 'choice'
   );
   const [profileId, setProfileId] = useState<string | null>(() =>
     readStoredString(STORAGE_KEYS.PROFILE_ID)
@@ -110,19 +127,22 @@ export default function App() {
     writeStoredString(STORAGE_KEYS.PROFILE_ID, id);
   };
 
-  const handleToggleSource = (id: string) => {
-    setSources((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, isActive: !s.isActive } : s))
-    );
+  const finishOnboarding = (next: UserProfile) => {
+    setProfile(next);
+    writeStoredString(STORAGE_KEYS.ONBOARDED, '1');
+    setOnboarding(null);
+    setActiveTab('dashboard');
   };
 
-  const handleChangeSourceWeight = (id: string, weight: number) => {
-    setSources((prev) => prev.map((s) => (s.id === id ? { ...s, weight } : s)));
-  };
-
-  const handleAddSuggestedSource = (newSource: HoroscopeSource) => {
-    setSources((prev) => [newSource, ...prev]);
-    showToast(`Added "${newSource.name}"`, 4000);
+  const handleRemovePersonalDetails = () => {
+    if (
+      !window.confirm(
+        'Remove your name, birth details and life answers from this device? Your forecast becomes a general one for your sign.'
+      )
+    )
+      return;
+    setProfile((prev) => toGeneralProfile(prev, getEffectiveChartSign(prev).sign));
+    setSaveProfileStatus(null);
   };
 
   const handleSaveProfile = async () => {
@@ -146,15 +166,27 @@ export default function App() {
     }
   };
 
-  const triggerForecast = async (customExcerpt?: string) => {
+  const triggerForecast = async (
+    options: { customExcerpt?: string; includeCurated?: boolean } = {}
+  ) => {
     if (forecastLoading) return;
     setActiveTab('dashboard');
     if (!isValidBackendUrl(profile.backendUrl)) {
       setForecastError(INVALID_BACKEND_URL_MESSAGE);
       return;
     }
+    const problem = profileProblem(profile);
+    if (problem) {
+      setForecastError(problem);
+      return;
+    }
     setToast(null);
-    const payload = await generate(profile, profileId, customExcerpt);
+    const payload = await generate({
+      profile,
+      profileId,
+      sources: sourceSettings,
+      ...options,
+    });
     if (!payload) return;
     rememberProfileId(payload.profileId);
     showToast(
@@ -162,6 +194,17 @@ export default function App() {
       5000
     );
   };
+
+  if (onboarding) {
+    return (
+      <Onboarding
+        profile={profile}
+        initialStep={onboarding}
+        onComplete={finishOnboarding}
+        onCancel={onboarding === 'choice' ? undefined : () => setOnboarding(null)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#080B14] text-slate-100 pb-24 md:pb-12">
@@ -206,7 +249,12 @@ export default function App() {
               </div>
             )}
 
-            {forecast && !forecastLoading && <ForecastResults forecast={forecast} />}
+            {forecast && !forecastLoading && (
+              <ForecastResults
+                forecast={forecast}
+                onRetryWithDefaultSources={() => triggerForecast({ includeCurated: true })}
+              />
+            )}
 
             <TransitHeatmapMatrix
               result={forecast?.result ?? null}
@@ -218,12 +266,12 @@ export default function App() {
 
         {activeTab === 'sources' && (
           <SourcesManager
-            sources={sources}
-            operatingTimezone={profile.operatingTimezone}
-            onToggleSource={handleToggleSource}
-            onChangeWeight={handleChangeSourceWeight}
-            onAddSuggestedSource={handleAddSuggestedSource}
-            onExtractLiveText={(excerpt) => triggerForecast(excerpt)}
+            settings={sourceSettings}
+            onChange={setSourceSettings}
+            backendUrl={isValidBackendUrl(profile.backendUrl) ? profile.backendUrl : ''}
+            report={forecast?.sources ?? null}
+            reportMonth={forecast?.targetMonth ?? null}
+            onExtractLiveText={(customExcerpt) => triggerForecast({ customExcerpt })}
             isSynthesizing={forecastLoading}
           />
         )}
@@ -239,6 +287,8 @@ export default function App() {
             }
             backendUrlValid={isValidBackendUrl(profile.backendUrl)}
             chartStatus={chartStatus}
+            onPersonalise={() => setOnboarding('birth')}
+            onRemovePersonalDetails={handleRemovePersonalDetails}
           />
         )}
       </main>
@@ -257,7 +307,7 @@ export default function App() {
             onClick={() => setActiveTab('profile')}
             className="hover:text-slate-300 transition-colors cursor-pointer"
           >
-            Timezone &amp; Rising Sign Settings
+            Profile Settings
           </button>
         </div>
       </footer>

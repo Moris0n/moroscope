@@ -10,6 +10,7 @@ import uvicorn
 from app.main import create_app
 
 from .helpers import (
+    CAFE_URL,
     PORT,
     UUID_PATTERN,
     VALID_PROFILE,
@@ -18,6 +19,9 @@ from .helpers import (
     make_deps,
     parse_sse,
     profile_files,
+    source_pages,
+    valid_event,
+    valid_forecast,
 )
 
 SYNTHESIZE = "/api/horoscope/synthesize"
@@ -95,9 +99,15 @@ async def test_synthesize_validates_the_request_before_doing_any_work():
             {**BODY, "profileId": "nope"},
             {**BODY, "customExcerpt": "x" * 8001},
             {**BODY, "customExcerpt": 5},
+            {**BODY, "sources": "all"},
+            {**BODY, "sources": {"user": [{"url": "ftp://files.example/x"}]}},
+            {**BODY, "sources": {"user": [{"url": "https://user:pw@site.example/x"}]}},
+            {**BODY, "sources": {"user": [{"url": f"https://s{i}.example/x"} for i in range(11)]}},
+            {**BODY, "sources": {"includeCurated": "yes"}},
+            {"profile": {**VALID_PROFILE, "lifeContext": {"work": "astronaut"}}},
         ]:
             assert (await client.post(SYNTHESIZE, json=body)).status_code == 400
-    assert upstream.calls == [] and profile_files(deps) == []
+    assert upstream.calls == [] and upstream.page_calls == [] and profile_files(deps) == []
 
 
 async def test_json_response_returns_result_and_profile_id():
@@ -110,6 +120,46 @@ async def test_json_response_returns_result_and_profile_id():
     assert len(data["result"]["events"]) == 1
     assert "BEGIN:VCALENDAR" in data["result"]["ics_content"]
     assert upstream.services == ["nebius", "tavily", "nebius"]
+    assert data["evidence"] == {"mode": "web", "gap": False}
+    assert [s["status"] for s in data["sources"]] == ["failed"] * 5 + ["used"]
+
+
+async def test_synthesize_reads_the_chosen_sources_and_reports_on_each():
+    upstream = Upstream(
+        pages=source_pages(),
+        nebius_outputs=[valid_forecast(events=[valid_event(source_urls=[CAFE_URL])])],
+    )
+    general = {"mode": "general", "sunSign": "Scorpio", "targetMonth": "November 2026"}
+    body = {
+        "profile": {**general, "priorities": []},
+        "sources": {"disabledCurated": ["rux-youtube", "astrology-zone", "no-such-source"]},
+    }
+    async with api_client(make_deps(upstream)) as client:
+        response = await client.post(SYNTHESIZE, json=body, headers=SSE)
+    name, payload = parse_sse(response.text)[-1]
+    assert name == "result"
+    assert payload["evidence"] == {"mode": "curated", "gap": False}
+    assert [(s["id"], s["status"]) for s in payload["sources"]] == [
+        ("cafe-astrology", "used"),
+        ("astrostyle", "used"),
+        ("sally-kirkman", "used"),
+    ]
+    assert upstream.services == ["nebius"]
+
+
+async def test_curated_sources_are_listed_for_the_sources_tab():
+    async with api_client(make_deps()) as client:
+        response = await client.get("/api/sources/curated")
+    sources = response.json()["sources"]
+    assert [s["id"] for s in sources] == [
+        "rux-youtube",
+        "cafe-astrology",
+        "astrology-zone",
+        "astrostyle",
+        "sally-kirkman",
+    ]
+    assert all(s["language"] == "en" and s["url"].startswith("https://") for s in sources)
+    assert set(sources[0]) == {"id", "name", "author", "type", "url", "language", "cadence"}
 
 
 async def test_missing_config_is_503_but_the_profile_is_still_saved():
@@ -129,7 +179,7 @@ async def test_upstream_failure_and_pipeline_timeout_statuses():
 
     upstream = Upstream(delay=0.5)
     deps = make_deps(upstream)
-    deps.timeout_seconds = 0.05
+    deps.timeout_seconds = 0.2
     async with api_client(deps) as client:
         response = await client.post(SYNTHESIZE, json=BODY)
     assert response.status_code == 504

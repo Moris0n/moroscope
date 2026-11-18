@@ -96,7 +96,7 @@ export const TransitHeatmapMatrix: React.FC<TransitHeatmapMatrixProps> = ({
             No generated forecast yet for {targetMonth}.
           </p>
           <p className="text-xs text-slate-500 max-w-md mx-auto">
-            Run &ldquo;Generate Personal Forecast&rdquo; from the Dashboard. Every colored
+            Generate a forecast from the Dashboard. Every colored
             cell below maps to a source-backed event — empty cells simply mean no
             sourced event covers that day, not an unfavorable one.
           </p>

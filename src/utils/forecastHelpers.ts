@@ -1,14 +1,61 @@
 import {
+  ForecastEvidence,
   ForecastResult,
   ImpactType,
   LifePriority,
+  SourceReport,
   TransitEvent,
 } from '../types/astrology';
 import {
   MonthRange,
   formatUtcDate,
   inclusiveDaySpan,
+  parseEvidence,
+  parseSourceReport,
 } from './forecastShared';
+
+export interface ForecastPayload {
+  result: ForecastResult;
+  profileId: string | null;
+  sources: SourceReport[];
+  evidence: ForecastEvidence | null;
+}
+
+/** The forecast response without trusting its optional parts; `result` is checked by the caller. */
+export function parseForecastPayload(payload: any): ForecastPayload {
+  return {
+    result: payload?.result as ForecastResult,
+    profileId: typeof payload?.profileId === 'string' ? payload.profileId : null,
+    sources: parseSourceReport(payload?.sources),
+    evidence: parseEvidence(payload?.evidence),
+  };
+}
+
+/** A short display name for a cited URL: the reporting source on the same site, else the host. */
+export function sourceLabel(url: string, sources: SourceReport[]): string {
+  let host: string;
+  let seconds = 0;
+  try {
+    const u = new URL(url);
+    host = u.hostname.replace(/^www\./, '');
+    seconds = /youtu/.test(host) ? parseInt(u.searchParams.get('t') || '0', 10) || 0 : 0;
+  } catch {
+    return url;
+  }
+  const match = sources.find((s) => {
+    try {
+      return s.url !== '' && new URL(s.url).hostname.replace(/^www\./, '') === host;
+    } catch {
+      return false;
+    }
+  });
+  const name = match ? match.name : host;
+  if (!seconds) return name;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${name} (at ${h}:${pad(m)}:${pad(seconds % 60)})`;
+}
 
 export function downloadIcs(icsContent: string, filename: string): void {
   const blob = new Blob([icsContent], {
@@ -162,7 +209,7 @@ export interface ForecastStreamHandlers {
 export async function readForecastSseStream(
   body: ReadableStream<Uint8Array>,
   handlers: ForecastStreamHandlers
-): Promise<{ result: ForecastResult; profileId: string | null }> {
+): Promise<ForecastPayload> {
   const reader = body.getReader();
   const parser = new SseParser();
   try {
@@ -182,11 +229,7 @@ export async function readForecastSseStream(
         } else if (msg.event === 'result') {
           const payload = JSON.parse(msg.data);
           await reader.cancel().catch(() => {});
-          return {
-            result: payload.result as ForecastResult,
-            profileId:
-              typeof payload.profileId === 'string' ? payload.profileId : null,
-          };
+          return parseForecastPayload(payload);
         } else if (msg.event === 'error') {
           const payload = JSON.parse(msg.data);
           await reader.cancel().catch(() => {});

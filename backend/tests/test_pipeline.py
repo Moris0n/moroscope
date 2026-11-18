@@ -9,23 +9,256 @@ import pytest
 from app.config import PipelineError, load_agent_config, load_allowed_hosts
 from app.pipeline import run_forecast_pipeline
 from app.prompts import FORECAST_AGENT_PROMPT, QUERY_AGENT_PROMPT
+from app.sources import validate_sources_config
 
 from .helpers import (
+    ASTROSTYLE_URL,
+    AZ_SCORPIO_URL,
+    CAFE_URL,
     DEFAULT_QUERY,
     FULL_ENV,
+    RUX_SCORPIO_URL,
+    RUX_VIDEO_URL,
+    SALLY_URL,
     UUID_PATTERN,
     VALID_PROFILE,
     Upstream,
+    fixture,
     make_deps,
     profile_files,
+    source_pages,
     valid_event,
     valid_forecast,
 )
 
 
-async def run(upstream, profile=VALID_PROFILE, excerpt=None, profile_id=None, steps=None):
+async def run(
+    upstream, profile=VALID_PROFILE, excerpt=None, profile_id=None, steps=None, sources=None
+):
     on_step = steps.append if steps is not None else (lambda step: None)
-    return await run_forecast_pipeline(profile, excerpt, make_deps(upstream), on_step, profile_id)
+    config = None
+    if sources is not None:
+        errors, config = validate_sources_config(sources)
+        assert errors == []
+    return await run_forecast_pipeline(
+        profile, excerpt, make_deps(upstream), on_step, profile_id, config
+    )
+
+
+def user_payload(call):
+    return json.loads(call["body"]["messages"][1]["content"])
+
+
+PERSONAL_DATA = ("Test User", "1994-10-17", "08:45", "New York", "America/New_York")
+LIFE_CONTEXT = {
+    "relationship": "dating",
+    "lookingForPartner": False,
+    "work": "jobSeeking",
+    "kids": ["under5"],
+    "moneyFocus": "",
+    "healthFocus": ["sleep"],
+    "goals": "  Find a product role by spring  ",
+    "upcomingEvents": [{"date": "2026-11-16", "label": "Final interview"}],
+}
+
+
+def cited_forecast(*urls):
+    return valid_forecast(events=[valid_event(source_urls=list(urls))])
+
+
+async def test_curated_sources_are_read_directly_without_any_search():
+    upstream = Upstream(pages=source_pages(), nebius_outputs=[cited_forecast(SALLY_URL)])
+    steps: list[int] = []
+    out = await run(upstream, steps=steps)
+
+    assert upstream.services == ["nebius"]
+    assert steps == [1, 2, 3, 4]
+    call = upstream.calls[0]
+    assert call["body"]["messages"][0] == {"role": "system", "content": FORECAST_AGENT_PROMPT}
+    data = user_payload(call)
+    assert set(data) == {"month", "person", "documents"}
+    assert data["month"] == {
+        "firstDate": "2026-11-01",
+        "lastDate": "2026-11-30",
+        "label": "November 2026",
+    }
+    assert [d["url"] for d in data["documents"]] == [
+        RUX_VIDEO_URL,
+        RUX_SCORPIO_URL,
+        CAFE_URL,
+        AZ_SCORPIO_URL,
+        ASTROSTYLE_URL,
+        SALLY_URL,
+    ]
+    by_url = {d["url"]: d["content"] for d in data["documents"]}
+    assert by_url[RUX_SCORPIO_URL] == (
+        "my dear scorpios on the 13th of november mercury and venus turn direct"
+    )
+    assert "page 3 of the Scorpio forecast" in by_url[AZ_SCORPIO_URL]
+    assert "Libra" not in by_url[CAFE_URL] and "October" not in by_url[CAFE_URL]
+
+    assert out["evidence"] == {"mode": "curated", "gap": False}
+    assert [(s["id"], s["status"]) for s in out["sources"]] == [
+        ("rux-youtube", "used"),
+        ("cafe-astrology", "used"),
+        ("astrology-zone", "used"),
+        ("astrostyle", "used"),
+        ("sally-kirkman", "used"),
+    ]
+    assert out["result"]["events"][0]["source_urls"] == [SALLY_URL]
+    assert re.match(UUID_PATTERN, out["profileId"])
+
+
+async def test_no_name_or_birth_data_ever_leaves_the_server():
+    profile = {**VALID_PROFILE, "lifeContext": LIFE_CONTEXT}
+    for pages in (source_pages(), {}):  # the direct path and the web-search fallback
+        upstream = Upstream(
+            pages=pages,
+            responder=lambda body: (
+                {"query": DEFAULT_QUERY}
+                if body["messages"][0]["content"] == QUERY_AGENT_PROMPT
+                else valid_forecast(events=[])
+            ),
+        )
+        await run(upstream, profile=profile, excerpt="an excerpt")
+        sent = json.dumps([call["body"] for call in upstream.calls]) + " ".join(upstream.page_calls)
+        for secret in PERSONAL_DATA:
+            assert secret not in sent, secret
+        person = user_payload(upstream.calls[-1])["person"]
+        assert person == {
+            "sign": "Scorpio",
+            "signKind": "rising",
+            "focusTopics": ["careerTransition", "financialPlanning"],
+            "sunSign": "Libra",
+            "moonSign": "Taurus",
+            "risingSign": "Scorpio",
+            "lifeContext": {
+                "relationship": "dating",
+                "work": "jobSeeking",
+                "kids": ["under5"],
+                "healthFocus": ["sleep"],
+                "goals": "Find a product role by spring",
+                "upcomingEvents": [{"date": "2026-11-16", "label": "Final interview"}],
+            },
+        }
+    # The search query agent never sees the life context.
+    query = user_payload(upstream.calls[0])
+    assert set(query) == {"sign", "signKind", "month", "focusTopics"}
+    assert "interview" not in json.dumps(upstream.calls[1]["body"])
+
+
+async def test_life_context_is_not_written_to_the_profile_snapshot():
+    deps = make_deps(Upstream(pages=source_pages(), nebius_outputs=[cited_forecast(CAFE_URL)]))
+    await run_forecast_pipeline(
+        {**VALID_PROFILE, "lifeContext": LIFE_CONTEXT}, None, deps, lambda s: None
+    )
+    stored = profile_files(deps)[0].read_text()
+    assert "lifeContext" not in stored and "interview" not in stored
+
+
+async def test_general_mode_keeps_and_sends_only_the_sign():
+    profile = {
+        **VALID_PROFILE,
+        "mode": "general",
+        "sunSign": "Scorpio",
+        "lifeContext": LIFE_CONTEXT,
+    }
+    upstream = Upstream(pages=source_pages(), nebius_outputs=[cited_forecast(CAFE_URL)])
+    deps = make_deps(upstream)
+    await run_forecast_pipeline(profile, None, deps, lambda s: None)
+    assert json.loads(profile_files(deps)[0].read_text()) == {
+        "mode": "general",
+        "sunSign": "Scorpio",
+        "targetMonth": "November 2026",
+        "priorities": ["careerTransition", "financialPlanning"],
+    }
+    assert user_payload(upstream.calls[0])["person"] == {
+        "sign": "Scorpio",
+        "signKind": "chosen",
+        "focusTopics": ["careerTransition", "financialPlanning"],
+    }
+
+
+async def test_user_sources_are_exclusive_and_a_gap_is_never_filled_silently():
+    page_url = "https://my-astrologer.example/monthly"
+    sources = {"user": [{"id": "u1", "url": page_url, "active": True}]}
+
+    upstream = Upstream(pages=source_pages())  # the user's page is a 404
+    steps: list[int] = []
+    out = await run(upstream, sources=sources, steps=steps)
+    assert upstream.calls == [], "no LLM call and no search without evidence"
+    assert upstream.page_calls == [page_url], "curated sources are not touched"
+    assert steps == [1, 2, 3, 4]
+    assert out["evidence"] == {"mode": "user", "gap": True}
+    assert out["result"]["events"] == []
+    assert "None of your sources" in out["result"]["overall_theme"]
+    assert "END:VCALENDAR" in out["result"]["ics_content"]
+    assert [(s["id"], s["origin"], s["status"]) for s in out["sources"]] == [
+        ("u1", "user", "failed")
+    ]
+
+    pages = {**source_pages(), page_url: fixture("all_signs_page.html")}
+    upstream = Upstream(pages=pages, nebius_outputs=[cited_forecast(page_url)])
+    out = await run(upstream, sources=sources)
+    assert upstream.services == ["nebius"]
+    documents = user_payload(upstream.calls[0])["documents"]
+    assert [d["url"] for d in documents] == [page_url]
+    assert "Scorpio fixture text" in documents[0]["content"]
+    assert "Libra fixture text" not in documents[0]["content"]
+    assert out["evidence"] == {"mode": "user", "gap": False}
+
+    # The explicit retry: the user's sources and the default ones together.
+    upstream = Upstream(pages=source_pages(), nebius_outputs=[cited_forecast(CAFE_URL)])
+    out = await run(upstream, sources={**sources, "includeCurated": True})
+    assert out["evidence"] == {"mode": "curated", "gap": False}
+    assert [s["status"] for s in out["sources"]] == ["failed"] + ["used"] * 5
+
+
+async def test_a_bare_site_added_by_the_user_is_searched_with_include_domains():
+    upstream = Upstream(
+        tavily_results=[
+            {"url": "https://blog.stars.example/nov", "title": "Nov", "content": "Nov 5 2026"},
+        ],
+        nebius_outputs=[cited_forecast("https://blog.stars.example/nov")],
+    )
+    sources = {
+        "user": [
+            {"url": "https://www.stars.example/"},
+            {"url": "https://other.example"},
+            {"url": "https://off.example", "active": False},
+        ]
+    }
+    out = await run(upstream, sources=sources)
+    assert upstream.services == ["tavily", "nebius"]
+    search = upstream.calls[0]["body"]
+    assert search["include_domains"] == ["stars.example", "other.example"]
+    assert search["query"] == "Scorpio monthly horoscope November 2026 key dates"
+    assert upstream.page_calls == []
+    assert [(s["name"], s["status"]) for s in out["sources"]] == [
+        ("stars.example", "used"),
+        ("other.example", "no_forecast"),
+    ]
+
+
+async def test_disabled_curated_sources_are_skipped_and_one_source_triggers_the_web_fallback():
+    disabled = ["rux-youtube", "cafe-astrology", "astrology-zone", "astrostyle"]
+    upstream = Upstream(
+        pages=source_pages(),
+        nebius_outputs=[
+            {"query": DEFAULT_QUERY},
+            cited_forecast(SALLY_URL, "https://astro.example/nov-2026"),
+        ],
+    )
+    out = await run(upstream, sources={"disabledCurated": disabled})
+    assert upstream.services == ["nebius", "tavily", "nebius"]
+    assert all("sallykirkman.com" in url for url in upstream.page_calls)
+    assert out["evidence"] == {"mode": "web", "gap": False}
+    assert [(s["id"], s["status"]) for s in out["sources"]] == [
+        ("sally-kirkman", "used"),
+        ("web-search", "used"),
+    ]
+    urls = [d["url"] for d in user_payload(upstream.calls[2])["documents"]]
+    assert urls == [SALLY_URL, "https://astro.example/nov-2026", "https://sky.example/scorpio"]
 
 
 async def test_two_nebius_calls_bracket_exactly_one_tavily_call_in_order():
@@ -43,9 +276,12 @@ async def test_two_nebius_calls_bracket_exactly_one_tavily_call_in_order():
     assert query_call["body"]["messages"][0] == {"role": "system", "content": QUERY_AGENT_PROMPT}
     assert query_call["body"]["response_format"] == {"type": "json_object"}
     query_data = json.loads(query_call["body"]["messages"][1]["content"])
-    assert query_data["month"] == {"firstDate": "2026-11-01", "lastDate": "2026-11-30"}
-    assert query_data["profile"]["sunSign"] == "Libra"
-    assert "backendUrl" not in query_data["profile"]
+    assert query_data == {
+        "sign": "Scorpio",
+        "signKind": "rising",
+        "month": {"firstDate": "2026-11-01", "lastDate": "2026-11-30", "label": "November 2026"},
+        "focusTopics": ["careerTransition", "financialPlanning"],
+    }
 
     search = upstream.calls[1]["body"]
     assert search == {
@@ -60,10 +296,11 @@ async def test_two_nebius_calls_bracket_exactly_one_tavily_call_in_order():
     forecast_call = upstream.calls[2]["body"]
     assert forecast_call["messages"][0]["content"] == FORECAST_AGENT_PROMPT
     forecast_data = json.loads(forecast_call["messages"][1]["content"])
-    assert forecast_data["query"] == DEFAULT_QUERY
-    assert len(forecast_data["results"]) == 2
-    assert "backendUrl" not in forecast_data["profile"]
-    assert "customExcerpt" not in forecast_data
+    assert len(forecast_data["documents"]) == 2
+    assert forecast_data["documents"][0]["source"] == "astro.example"
+    assert "profile" not in forecast_data and "customExcerpt" not in forecast_data
+    assert out["evidence"] == {"mode": "web", "gap": False}
+    assert out["sources"][-1]["id"] == "web-search"
 
     assert len(out["result"]["events"]) == 1
     assert "BEGIN:VCALENDAR" in out["result"]["ics_content"]
@@ -81,9 +318,9 @@ async def test_custom_excerpt_is_bounded_and_search_results_are_sanitized():
     await run(upstream, excerpt="e" * 9000)
     data = json.loads(upstream.calls[2]["body"]["messages"][1]["content"])
     assert len(data["customExcerpt"]) == 8000
-    assert [r["url"] for r in data["results"]] == ["https://astro.example/nov-2026"]
-    assert len(data["results"][0]["title"]) == 300
-    assert len(data["results"][0]["content"]) == 12000
+    assert [r["url"] for r in data["documents"]] == ["https://astro.example/nov-2026"]
+    assert len(data["documents"][0]["title"]) == 300
+    assert len(data["documents"][0]["content"]) == 12000
 
 
 async def test_concurrent_same_profile_id_pipelines_each_use_their_own_snapshot():
@@ -93,7 +330,7 @@ async def test_concurrent_same_profile_id_pipelines_each_use_their_own_snapshot(
         user = json.loads(body["messages"][1]["content"])
         day = user["month"]["firstDate"][:8] + "05"
         return valid_forecast(
-            events=[valid_event(date=day, topics=[user["profile"]["priorities"][0]])]
+            events=[valid_event(date=day, topics=[user["person"]["focusTopics"][0]])]
         )
 
     upstream = Upstream(responder=respond)
@@ -115,7 +352,7 @@ async def test_concurrent_same_profile_id_pipelines_each_use_their_own_snapshot(
         if "nebius" in call["url"] and call["body"]["messages"][0]["content"] == QUERY_AGENT_PROMPT
     ]
     assert sorted(q["month"]["firstDate"] for q in query_payloads) == ["2026-11-01", "2026-12-01"]
-    assert sorted(q["profile"]["priorities"][0] for q in query_payloads) == [
+    assert sorted(q["focusTopics"][0] for q in query_payloads) == [
         "careerTransition",
         "datingRomance",
     ]
@@ -142,18 +379,14 @@ async def test_rejects_invalid_query_and_fabricated_forecast_fields(nebius_outpu
     assert error.value.status == 502
 
 
-async def test_empty_search_evidence_gives_an_honest_empty_result():
-    upstream = Upstream(
-        tavily_results=[],
-        nebius_outputs=[
-            {"query": "q"},
-            {"overall_theme": "No adequately dated sources found for this month.", "events": []},
-        ],
-    )
+async def test_no_evidence_at_all_gives_an_honest_empty_result_without_a_forecast_call():
+    upstream = Upstream(tavily_results=[], nebius_outputs=[{"query": "q"}])
     out = await run(upstream)
+    assert upstream.services == ["nebius", "tavily"]
     assert out["result"]["events"] == []
-    assert "No adequately dated" in out["result"]["overall_theme"]
+    assert "No forecast for November 2026" in out["result"]["overall_theme"]
     assert "END:VCALENDAR" in out["result"]["ics_content"]
+    assert out["evidence"] == {"mode": "web", "gap": True}
 
 
 @pytest.mark.parametrize(
@@ -221,3 +454,37 @@ def test_load_allowed_hosts_defaults_to_localhost_and_honours_override():
         "moroscope.example.com",
         "api.example.com:8443",
     }
+
+
+async def test_an_unparseable_or_cut_off_answer_is_asked_for_once_more():
+    answers = [
+        {
+            "choices": [
+                {"message": {"content": '{"overall_theme": "cut'}, "finish_reason": "length"}
+            ]
+        },
+        {"choices": [{"message": {"content": json.dumps(cited_forecast(CAFE_URL))}}]},
+    ]
+
+    def scripted(replies):
+        upstream = Upstream(pages=source_pages())
+        original = upstream.__call__
+
+        async def handler(request):
+            if request.method == "GET":
+                return await original(request)
+            upstream.calls.append({"url": str(request.url)})
+            return httpx.Response(200, json=replies[min(len(upstream.calls), len(replies)) - 1])
+
+        deps = make_deps(upstream)
+        deps.http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        return upstream, deps
+
+    upstream, deps = scripted(answers)
+    out = await run_forecast_pipeline(VALID_PROFILE, None, deps, lambda s: None)
+    assert len(upstream.calls) == 2 and len(out["result"]["events"]) == 1
+
+    upstream, deps = scripted(answers[:1])
+    with pytest.raises(PipelineError, match="ran out of output tokens") as error:
+        await run_forecast_pipeline(VALID_PROFILE, None, deps, lambda s: None)
+    assert error.value.status == 502 and len(upstream.calls) == 2

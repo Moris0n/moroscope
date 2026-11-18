@@ -28,6 +28,8 @@ import {
 } from '../utils/timezoneEngine';
 import { ChartStatus } from '../hooks/useNatalChart';
 import { BirthPlaceSearch } from './BirthPlaceSearch';
+import { LifeContextForm } from './LifeContextForm';
+import { SignPicker } from './SignPicker';
 import {
   LIFE_PRIORITIES,
   PRIORITY_LABELS,
@@ -42,6 +44,8 @@ interface NatalProfilePanelProps {
   saveProfileStatus: string | null;
   backendUrlValid: boolean;
   chartStatus: ChartStatus;
+  onPersonalise: () => void;
+  onRemovePersonalDetails: () => void;
 }
 
 const ALL_CATEGORIES: ActivityCategory[] = [
@@ -63,6 +67,8 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
   saveProfileStatus,
   backendUrlValid,
   chartStatus,
+  onPersonalise,
+  onRemovePersonalDetails,
 }) => {
   const [showBackendSettings, setShowBackendSettings] = useState(false);
   const targetMonthValid = !!parseMonthRange(profile.targetMonth);
@@ -137,6 +143,39 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
 
   return (
     <div className="space-y-6">
+      {profile.mode === 'general' ? (
+        <div className="rounded-2xl bg-[#10172A] border border-slate-800/80 p-5 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
+            <div>
+              <div className="text-xs text-slate-400">General forecast</div>
+              <h2 className="text-lg sm:text-xl font-semibold text-slate-100 mt-1">
+                Your sign
+              </h2>
+              <p className="text-xs text-slate-400 mt-1 max-w-xl">
+                Your Rising sign if you know it, otherwise your Sun sign. Nothing else about you
+                is stored or sent.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onPersonalise}
+              className="min-h-[42px] px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold flex items-center gap-2 transition-colors self-start cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4" />
+              Personalise my forecast
+            </button>
+          </div>
+          <div className="mt-5 max-w-2xl">
+            <SignPicker
+              value={profile.sunSign}
+              onChange={(sign) =>
+                onUpdateProfile({ ...profile, sunSign: sign, moonSign: sign })
+              }
+            />
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Natal Chart Triad Summary */}
       <div className="rounded-2xl bg-[#10172A] border border-slate-800/80 p-5 sm:p-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
@@ -149,7 +188,7 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
               </span>
             </div>
             <h2 className="text-lg sm:text-xl font-semibold text-slate-100 mt-1">
-              {profile.name}&apos;s Natal Triad &amp; Timezone Calibration
+              {profile.name.trim() ? `${profile.name.trim()}'s` : 'Your'} Natal Triad &amp; Timezone Calibration
             </h2>
           </div>
 
@@ -421,7 +460,7 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
         <div className="mt-6 pt-6 border-t border-slate-800/80 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-300 mb-1.5">
-              Profile Name
+              Name or nickname (optional)
             </label>
             <input
               type="text"
@@ -515,7 +554,7 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              All crawled horoscope sources are first normalized from their native timezones to <strong>UTC</strong>, then adjusted to your operating timezone below.
+              The timezone you live in now. It is stored with your profile; forecast events are whole days.
             </p>
           </div>
 
@@ -607,9 +646,37 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
       </div>
 
       <div className="rounded-2xl bg-[#10172A] border border-slate-800/80 p-5 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-5 border-b border-slate-800/80">
+          <div>
+            <div className="text-xs text-slate-400">Optional · used to personalise your forecast</div>
+            <h3 className="text-base font-semibold text-slate-100 mt-1">Your life right now</h3>
+            <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+              These answers are sent to the AI service that writes your forecast. Your name and
+              birth details are not. Nothing here is used in a web search or kept on the server.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onRemovePersonalDetails}
+            className="min-h-[40px] px-3.5 py-2 rounded-xl bg-[#080B14] border border-rose-500/40 text-rose-200 hover:bg-rose-500/10 text-xs font-medium transition-colors whitespace-nowrap self-start cursor-pointer"
+          >
+            Remove my personal details
+          </button>
+        </div>
+        <div className="mt-5">
+          <LifeContextForm
+            value={profile.lifeContext}
+            onChange={(lifeContext) => onUpdateProfile({ ...profile, lifeContext })}
+          />
+        </div>
+      </div>
+        </>
+      )}
+
+      <div className="rounded-2xl bg-[#10172A] border border-slate-800/80 p-5 sm:p-6">
         <div className="pb-5 border-b border-slate-800/80">
           <div className="text-xs text-slate-400">
-            Agentic Monthly Forecast Pipeline · Nebius → Tavily → Nebius → .ics
+            Monthly forecast settings
           </div>
           <h3 className="text-base font-semibold text-slate-100 mt-1">
             Target Month, Life Focus &amp; Backend Connection

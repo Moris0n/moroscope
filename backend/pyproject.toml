@@ -4,12 +4,14 @@ version = "0.1.0"
 description = "Moroscope forecast API: Nebius + Tavily pipeline, profile storage, .ics generation"
 requires-python = ">=3.12"
 dependencies = [
+    "defusedxml>=0.7.1",
     "fastapi>=0.162.2",
     "httpx>=0.28.1",
     "python-dotenv>=1.2.4",
     "skyfield>=1.55",
     "tzdata>=2026.6",
     "uvicorn[standard]>=0.54.0",
+    "youtube-transcript-api>=1.2.5",
 ]
 
 [tool.pytest.ini_options]
