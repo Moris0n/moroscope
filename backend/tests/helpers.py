@@ -12,6 +12,7 @@ import httpx
 
 from app.config import local_allowed_hosts
 from app.main import create_app
+from app.models import parse_profile
 from app.pipeline import PipelineDeps
 
 PORT = 8000
@@ -37,9 +38,8 @@ VALID_PROFILE: dict[str, Any] = {
     "moonSign": "Taurus",
     "risingSign": "Scorpio",
     "useRisingPrimary": True,
-    "activeCategories": ["career", "finance"],
     "targetMonth": "November 2026",
-    "priorities": ["careerTransition", "financialPlanning"],
+    "focusAreas": ["career", "money"],
     "backendUrl": "",
 }
 
@@ -109,21 +109,26 @@ def page_response(body: Any) -> httpx.Response:
     )
 
 
+def profile_model(**overrides: Any):
+    """VALID_PROFILE (with overrides) as the validated model the pipeline takes."""
+    return parse_profile({**VALID_PROFILE, **overrides})
+
+
 def valid_event(**overrides: Any) -> dict[str, Any]:
     return {
         "date": "2026-11-05",
         "title": "Mars ingress window",
-        "impact_type": "Opportunity",
+        "type": "goodTime",
         "summary": "A sourced transit event.",
-        "topics": ["careerTransition"],
-        "source_urls": ["https://astro.example/nov-2026"],
+        "lifeAreas": ["career"],
+        "sourceUrls": ["https://astro.example/nov-2026"],
         **overrides,
     }
 
 
 def valid_forecast(**overrides: Any) -> dict[str, Any]:
     return {
-        "overall_theme": "A month of sourced transitions.",
+        "theme": "A month of sourced transitions.",
         "events": [valid_event()],
         **overrides,
     }

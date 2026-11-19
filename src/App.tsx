@@ -14,6 +14,7 @@ import {
   isLegacyProfile,
   isValidBackendUrl,
   mergeProfileWithDefaults,
+  primarySign,
   profileProblem,
   reviveSourceSettings,
   toGeneralProfile,
@@ -51,18 +52,8 @@ const INITIAL_PROFILE: UserProfile = {
   sunSign: 'Aries',
   moonSign: 'Aries',
   useRisingPrimary: false,
-  activeCategories: [
-    'career',
-    'finance',
-    'social',
-    'hobbies',
-    'wellness',
-    'strategic',
-    'mind',
-    'rest',
-  ],
   targetMonth: defaultTargetMonth(),
-  priorities: [],
+  focusAreas: [],
   backendUrl: DEFAULT_BACKEND_URL,
 };
 
@@ -106,7 +97,8 @@ export default function App() {
     error: forecastError,
     setError: setForecastError,
     generate,
-  } = useForecast();
+    clearForecasts,
+  } = useForecast(profile.targetMonth);
 
   const chartStatus = useNatalChart(profile, setProfile);
 
@@ -137,11 +129,13 @@ export default function App() {
   const handleRemovePersonalDetails = () => {
     if (
       !window.confirm(
-        'Remove your name, birth details and life answers from this device? Your forecast becomes a general one for your sign.'
+        'Remove your name, birth details, life answers and saved forecasts from this device? Your forecast becomes a general one for your sign.'
       )
     )
       return;
     setProfile((prev) => toGeneralProfile(prev, getEffectiveChartSign(prev).sign));
+    // Stored forecasts hold personal notes written from the life answers.
+    clearForecasts();
     setSaveProfileStatus(null);
   };
 
@@ -252,6 +246,11 @@ export default function App() {
             {forecast && !forecastLoading && (
               <ForecastResults
                 forecast={forecast}
+                madeFor={
+                  forecast.sign !== primarySign(profile).sign || forecast.mode !== profile.mode
+                    ? `${forecast.sign}, ${forecast.mode === 'personal' ? 'personal' : 'general'}`
+                    : null
+                }
                 onRetryWithDefaultSources={() => triggerForecast({ includeCurated: true })}
               />
             )}
@@ -259,7 +258,7 @@ export default function App() {
             <TransitHeatmapMatrix
               result={forecast?.result ?? null}
               targetMonth={forecast?.targetMonth ?? profile.targetMonth}
-              priorities={forecast?.priorities ?? profile.priorities}
+              areas={forecast?.focusAreas ?? profile.focusAreas}
             />
           </div>
         )}

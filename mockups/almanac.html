@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Moroscope mockup A: Almanac</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&family=Fraunces:opsz,wght@9..144,400..700&display=swap" rel="stylesheet" />
+<style>
+  :root { --paper:#F6F1E7; --card:#FBF8F1; --ink:#1F1B16; --soft:#6E655A; --line:#DDD3C2; --good:#3E6B4A; --care:#B5532A; --key:#2F3E6B; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--paper); color:var(--ink); font:16px/1.55 'DM Sans',system-ui,sans-serif; padding-bottom:72px; }
+  .serif { font-family:'Fraunces',Georgia,serif; }
+  .mast { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid var(--line); font-size:13px; }
+  .brand { font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:18px; letter-spacing:.01em; }
+  .mast nav { display:none; gap:24px; }
+  .mast nav a, .tabs a { color:var(--soft); text-decoration:none; }
+  .mast nav a.on, .tabs a.on { color:var(--ink); font-weight:600; }
+  .who { color:var(--soft); }
+  main { max-width:1040px; margin:0 auto; padding:28px 20px; display:grid; grid-template-columns:minmax(0,1fr); gap:40px; }
+  .kicker { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--soft); }
+  h1 { font-family:'Fraunces',Georgia,serif; font-weight:500; font-size:44px; line-height:1.05; margin-top:6px; letter-spacing:-.01em; }
+  .lead { font-family:'Fraunces',Georgia,serif; font-size:19px; line-height:1.5; margin-top:16px; max-width:34em; }
+  .lead::first-letter { float:left; font-size:3.1em; line-height:.85; padding:6px 8px 0 0; font-weight:500; }
+  .actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px 16px; margin-top:20px; font-size:13px; color:var(--soft); }
+  .btn { background:var(--ink); color:var(--paper); border:0; border-radius:999px; padding:11px 18px; font:600 14px 'DM Sans',sans-serif; cursor:pointer; }
+  .week { margin-top:36px; }
+  .week h2 { font-size:12px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--soft); padding-bottom:8px; border-bottom:1px solid var(--ink); }
+  .entry { display:grid; grid-template-columns:64px 1fr; gap:14px; padding:18px 0; border-bottom:1px solid var(--line); }
+  .entry.past { opacity:.55; }
+  .day { font-family:'Fraunces',Georgia,serif; font-size:30px; line-height:1; }
+  .day small { display:block; font:500 12px 'DM Sans',sans-serif; color:var(--soft); margin-top:5px; }
+  .type { font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+  .good { color:var(--good); } .care { color:var(--care); } .key { color:var(--key); }
+  .entry h3 { font-family:'Fraunces',Georgia,serif; font-weight:500; font-size:21px; line-height:1.25; margin-top:3px; }
+  .entry p { margin-top:6px; color:#3B352D; }
+  .meta { margin-top:8px; font-size:13px; color:var(--soft); }
+  .meta a { color:inherit; text-underline-offset:3px; }
+  .todayline { display:flex; align-items:center; gap:10px; margin-top:18px; font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--care); }
+  .todayline::after { content:''; flex:1; height:1px; background:var(--care); }
+  aside { display:grid; gap:24px; align-content:start; }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:18px; }
+  .box h4 { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--soft); margin-bottom:12px; }
+  .mini { display:none; }
+  .cal { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; text-align:center; font-size:13px; }
+  .cal b { font-size:11px; color:var(--soft); font-weight:500; }
+  .cal span { padding:5px 0; border-radius:50%; position:relative; }
+  .cal span.t { outline:1.5px solid var(--ink); }
+  .cal span i { position:absolute; left:50%; bottom:1px; width:4px; height:4px; margin-left:-2px; border-radius:50%; background:currentColor; }
+  .src li { list-style:none; display:flex; justify-content:space-between; gap:12px; padding:6px 0; font-size:14px; border-top:1px solid var(--line); }
+  .src li:first-child { border-top:0; }
+  .src em { font-style:normal; color:var(--soft); font-size:13px; white-space:nowrap; }
+  .tabs { position:fixed; inset:auto 0 0 0; display:grid; grid-template-columns:repeat(3,1fr); background:var(--paper); border-top:1px solid var(--line); text-align:center; font-size:13px; }
+  .tabs a { padding:18px 0; }
+  @media (min-width:860px) {
+    body { padding-bottom:0; } .tabs { display:none; } .mast nav { display:flex; } .mast { padding:16px 32px; }
+    main { grid-template-columns:minmax(0,1fr) 280px; gap:64px; padding:48px 32px; }
+    h1 { font-size:64px; } aside { position:sticky; top:32px; } .mini { display:block; }
+  }
+</style>
+</head>
+<body>
+<header class="mast">
+  <span class="brand">Moroscope</span>
+  <nav><a class="on" href="#">Month</a><a href="#">Sources</a><a href="#">You</a></nav>
+  <span class="who" id="who"></span>
+</header>
+<main>
+  <article>
+    <p class="kicker">Your month, from the astrologers you trust</p>
+    <h1 id="title"></h1>
+    <p class="lead" id="theme"></p>
+    <div class="actions"><button class="btn">Add the month to my calendar</button><span id="updated"></span></div>
+    <div id="weeks"></div>
+  </article>
+  <aside>
+    <div class="box mini"><h4 id="minititle"></h4><div class="cal" id="cal"></div></div>
+    <div class="box"><h4>Read for this forecast</h4><ul class="src" id="src"></ul></div>
+  </aside>
+</main>
+<nav class="tabs"><a class="on" href="#">Month</a><a href="#">Sources</a><a href="#">You</a></nav>
+<script src="data.js"></script>
+<script>
+  const M = window.MOCK, $ = (id) => document.getElementById(id);
+  $('who').textContent = `${M.glyph} ${M.sign} · personal`;
+  $('title').textContent = `${M.month} ${M.year}`;
+  $('theme').textContent = M.theme;
+  $('updated').textContent = `Updated today · ${M.usedCount} of ${M.sources.length} sources had a forecast`;
+  $('minititle').textContent = `${M.month} at a glance`;
+  // Weeks run Monday to Sunday.
+  const weekStart = (d) => d - ((M.dow(d) + 6) % 7);
+  let html = '', week = null, marked = false;
+  for (const e of M.events) {
+    const ws = weekStart(e.from);
+    if (!marked && M.end(e) >= M.today) {
+      marked = true;
+      html += `<div class="todayline">Today · ${M.wd(M.today)} ${M.today}</div>`;
+    }
+    if (ws !== week) {
+      if (week !== null) html += '</section>';
+      week = ws;
+      html += `<section class="week"><h2>${Math.max(ws, 1)}\u2013${Math.min(ws + 6, M.days)} ${M.month}</h2>`;
+    }
+    html += `<div class="entry${M.end(e) < M.today ? ' past' : ''}">
+      <div class="day">${e.from}${e.to ? '\u2013' + e.to : ''}<small>${e.to ? M.wd(e.from) + ' to ' + M.wd(e.to) : M.wd(e.from)}</small></div>
+      <div><div class="type ${e.type}">${M.typeLabel[e.type]}</div><h3>${e.title}</h3><p>${e.summary}</p>
+      <div class="meta">${e.topics.join(', ')} · according to ${e.sources.map((s) => `<a href="#">${s}</a>`).join(' and ')}</div></div></div>`;
+  }
+  $('weeks').innerHTML = html + '</section>';
+  let cal = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => `<b>${d}</b>`).join('') + '<span></span>'.repeat((M.dow(1) + 6) % 7);
+  for (let d = 1; d <= M.days; d++) {
+    const ev = M.on(d)[0];
+    cal += `<span class="${d === M.today ? 't ' : ''}${ev ? ev.type : ''}">${d}${ev ? '<i></i>' : ''}</span>`;
+  }
+  $('cal').innerHTML = cal;
+  $('src').innerHTML = M.sources.map((s) => `<li>${s.name}<em>${s.status}</em></li>`).join('');
+</script>
+</body>
+</html>

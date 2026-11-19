@@ -18,7 +18,6 @@ from app.youtube import (
 from .helpers import (
     RUX_FEED_URL,
     RUX_SCORPIO_URL,
-    RUX_VIDEO_URL,
     TRANSCRIPT,
     Upstream,
     fixture,
@@ -98,14 +97,10 @@ def test_slice_transcript_takes_the_half_open_interval():
     assert slice_transcript(TRANSCRIPT, 500, 600) == ""
 
 
-def test_video_documents_are_the_overview_and_the_sign_chapter_with_a_deep_link():
+def test_video_documents_are_the_sign_chapter_alone_with_a_deep_link():
     video = videos()[1]
-    overview, chapter = video_documents(video, TRANSCRIPT, SCORPIO)
-    assert overview["url"] == RUX_VIDEO_URL
-    assert overview["title"].endswith("(general overview)")
-    assert overview["content"] == (
-        "hello everybody this is the general overview the new moon is on the 9th of november"
-    )
+    (chapter,) = video_documents(video, TRANSCRIPT, SCORPIO)
+    assert "general overview" not in chapter["content"]
     assert chapter["url"] == RUX_SCORPIO_URL and chapter["title"].endswith("(Scorpio)")
     assert chapter["source"] == "Written in the Stars by Rux"
     assert "aries" not in chapter["content"] and "sagittarians" not in chapter["content"]
@@ -130,7 +125,7 @@ async def test_youtube_channel_reads_the_feed_then_the_transcript():
     upstream = Upstream(pages={RUX_FEED_URL: fixture("youtube_feed.xml")})
     deps = make_deps(upstream)
     documents = await youtube_channel(deps, SCORPIO, CHANNEL)
-    assert [d["url"] for d in documents] == [RUX_VIDEO_URL, RUX_SCORPIO_URL]
+    assert [d["url"] for d in documents] == [RUX_SCORPIO_URL]
     assert upstream.page_calls == [RUX_FEED_URL]
 
     with pytest.raises(NoForecast):
@@ -165,7 +160,7 @@ async def test_user_youtube_addresses_are_resolved_to_their_channel():
         await resolve_channel_id(deps, "https://www.youtube.com/@nobody")
 
     documents = await youtube_url(deps, SCORPIO, handle)
-    assert [d["url"] for d in documents] == [RUX_VIDEO_URL, RUX_SCORPIO_URL]
+    assert [d["url"] for d in documents] == [RUX_SCORPIO_URL]
 
 
 def test_is_youtube_url():

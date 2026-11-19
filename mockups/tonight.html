@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Moroscope mockup C: Tonight</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg:#0C0E18; --card:#151927; --line:#252B3D; --ink:#ECEEF4; --soft:#8B93A7; --gold:#E8B84A; --good:#6FCF97; --care:#F2994A; --key:#B79CF5; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink); font:15px/1.5 'DM Sans',system-ui,sans-serif; padding-bottom:84px; }
+  h1,h2,h3,.brand { font-family:'Outfit',system-ui,sans-serif; }
+  button { font:inherit; color:inherit; cursor:pointer; }
+  .top { max-width:720px; margin:0 auto; padding:16px 20px 0; display:flex; justify-content:space-between; align-items:center; }
+  .brand { color:var(--gold); font-weight:700; font-size:18px; }
+  .who { font-size:13px; color:var(--soft); border:1px solid var(--line); border-radius:999px; padding:5px 12px; }
+  main { max-width:720px; margin:0 auto; padding:20px; }
+  .hello { font-size:13px; color:var(--soft); }
+  h1 { font-size:28px; font-weight:600; letter-spacing:-.01em; line-height:1.2; margin-top:2px; }
+  .now { margin-top:18px; border-radius:20px; padding:20px; background:linear-gradient(160deg,#1D2238,#151927 70%); border:1px solid var(--line); }
+  .now .label { font-size:12px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--gold); }
+  .now h2 { font-size:22px; font-weight:600; margin-top:6px; line-height:1.25; }
+  .now p { color:#C4C9D6; margin-top:6px; }
+  .now .until { display:inline-block; margin-top:12px; font-size:13px; color:var(--good); background:rgba(111,207,151,.12); border-radius:999px; padding:4px 10px; }
+  .heads { margin-top:14px; padding-top:14px; border-top:1px solid var(--line); display:flex; gap:10px; align-items:baseline; font-size:14px; }
+  .heads b { color:var(--care); white-space:nowrap; font-weight:600; }
+  .strip { display:flex; gap:6px; overflow-x:auto; margin:20px -20px 0; padding:0 20px 4px; scrollbar-width:none; }
+  .pill { flex:0 0 44px; height:64px; border-radius:14px; border:1px solid var(--line); background:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:15px; font-weight:600; }
+  .pill small { font-size:10px; font-weight:500; color:var(--soft); }
+  .pill.past { opacity:.45; }
+  .pill.today { background:var(--gold); border-color:var(--gold); color:#1A1405; } .pill.today small { color:#5C4710; }
+  .pill .dots { height:5px; display:flex; gap:2px; } .pill .dots i { width:5px; height:5px; border-radius:50%; }
+  i.good { background:var(--good); } i.care { background:var(--care); } i.key { background:var(--key); }
+  .pill.today i { outline:1px solid #1A1405; }
+  h4 { margin-top:28px; font-size:12px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--soft); }
+  .item { margin-top:10px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px 16px; display:grid; grid-template-columns:4px 1fr; gap:14px; }
+  .item .bar { border-radius:2px; } .bar.good { background:var(--good); } .bar.care { background:var(--care); } .bar.key { background:var(--key); }
+  .item .when { font-size:12px; color:var(--soft); }
+  .item .when b { font-weight:600; } .when .good { color:var(--good); } .when .care { color:var(--care); } .when .key { color:var(--key); }
+  .item h3 { font-size:16px; font-weight:600; margin-top:2px; }
+  .item p { font-size:14px; color:#B4BACA; margin-top:4px; }
+  .item .src { font-size:12px; color:var(--soft); margin-top:8px; }
+  .item.past { opacity:.5; } .item.past p, .item.past .src { display:none; }
+  .theme { margin-top:28px; padding-left:16px; border-left:2px solid var(--gold); color:#C4C9D6; font-size:15px; }
+  .foot { margin-top:24px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; font-size:13px; color:var(--soft); }
+  .primary { background:var(--gold); color:#1A1405; border:0; border-radius:12px; padding:12px 18px; font-weight:700; font-size:14px; }
+  .ghost { background:none; border:1px solid var(--line); border-radius:12px; padding:11px 16px; font-size:14px; }
+  .tabs { position:fixed; left:50%; bottom:14px; transform:translateX(-50%); display:flex; gap:4px; padding:5px; background:rgba(21,25,39,.92); backdrop-filter:blur(10px); border:1px solid var(--line); border-radius:999px; font-size:13px; font-weight:500; }
+  .tabs a { padding:9px 18px; border-radius:999px; color:var(--soft); text-decoration:none; }
+  .tabs a.on { background:var(--ink); color:var(--bg); }
+</style>
+</head>
+<body>
+<header class="top"><span class="brand">Moroscope</span><span class="who" id="who"></span></header>
+<main>
+  <p class="hello" id="hello"></p>
+  <h1 id="title"></h1>
+  <section class="now" id="now"></section>
+  <div class="strip" id="strip"></div>
+  <h4>Coming up</h4><div id="next"></div>
+  <blockquote class="theme" id="theme"></blockquote>
+  <h4>Earlier this month</h4><div id="past"></div>
+  <div class="foot"><span id="updated"></span><span><button class="ghost">Refresh</button> <button class="primary">Add to calendar</button></span></div>
+</main>
+<nav class="tabs"><a class="on" href="#">Now</a><a href="#">Sources</a><a href="#">You</a></nav>
+<script src="data.js"></script>
+<script>
+  const M = window.MOCK, $ = (id) => document.getElementById(id);
+  $('who').textContent = `${M.glyph} ${M.sign}`;
+  $('hello').textContent = `${M.wd(M.today)} ${M.today} ${M.month} ${M.year}`;
+  const todays = M.on(M.today), main = todays[0], soon = M.events.find((e) => e.from > M.today);
+  $('title').textContent = main ? 'Here is what today is good for' : 'A quiet day in your month';
+  $('now').innerHTML = (main
+    ? `<div class="label">${M.typeLabel[main.type]} · ${main.topics.join(', ')}</div><h2>${main.title}</h2><p>${main.summary}</p>
+       ${main.to ? `<span class="until">Window open through ${M.wd(main.to)} ${main.to}</span>` : ''}`
+    : `<div class="label">Nothing sourced today</div><p>No source wrote about today.</p>`) +
+    (soon ? `<div class="heads"><b>${soon.from === M.today + 1 ? 'Tomorrow' : M.wd(soon.from) + ' ' + soon.from}</b><span>${M.typeLabel[soon.type]}: ${soon.title.toLowerCase()}</span></div>` : '');
+  let strip = '';
+  for (let d = 1; d <= M.days; d++) {
+    strip += `<button class="pill${d < M.today ? ' past' : d === M.today ? ' today' : ''}"><small>${M.wd(d)}</small>${d}<span class="dots">${M.on(d).map((e) => `<i class="${e.type}"></i>`).join('')}</span></button>`;
+  }
+  $('strip').innerHTML = strip;
+  const item = (e, past) => `<div class="item${past ? ' past' : ''}"><span class="bar ${e.type}"></span><div>
+    <div class="when"><b class="${e.type}">${M.typeLabel[e.type]}</b> · ${M.range(e)} · ${e.topics.join(', ')}</div><h3>${e.title}</h3><p>${e.summary}</p>
+    <div class="src">${e.sources.join(' · ')}</div></div></div>`;
+  $('next').innerHTML = M.events.filter((e) => e.from > M.today).map((e) => item(e)).join('');
+  $('past').innerHTML = M.events.filter((e) => M.end(e) < M.today).reverse().map((e) => item(e, true)).join('');
+  $('theme').textContent = M.theme;
+  $('updated').textContent = `${M.usedCount} of ${M.sources.length} sources had a forecast`;
+  $('strip').scrollLeft = (M.today - 3) * 50;
+</script>
+</body>
+</html>

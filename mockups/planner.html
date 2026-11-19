@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Moroscope mockup B: Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg:#F4F5F7; --card:#fff; --ink:#14161A; --soft:#6B7280; --line:#E3E5EA; --accent:#4338CA;
+    --good:#15803D; --goodbg:#DCFCE7; --care:#C2410C; --carebg:#FFEDD5; --key:#6D28D9; --keybg:#EDE9FE; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink); font:15px/1.5 'DM Sans',system-ui,sans-serif; padding-bottom:76px; }
+  button { font:inherit; color:inherit; cursor:pointer; }
+  .top { background:var(--card); border-bottom:1px solid var(--line); }
+  .top div { max-width:1100px; margin:0 auto; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
+  .brand { font-weight:700; font-size:17px; }
+  .top nav { display:none; gap:6px; }
+  .top nav a { padding:7px 12px; border-radius:8px; color:var(--soft); text-decoration:none; font-weight:500; }
+  .top nav a.on { background:var(--bg); color:var(--ink); }
+  .chip { border:1px solid var(--line); background:var(--card); border-radius:999px; padding:6px 12px; font-size:13px; font-weight:500; white-space:nowrap; }
+  main { max-width:1100px; margin:0 auto; padding:16px; display:grid; grid-template-columns:minmax(0,1fr); gap:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; }
+  .monthbar { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .monthbar h1 { font-size:22px; font-weight:700; letter-spacing:-.01em; }
+  .arrows button { width:36px; height:36px; border-radius:10px; border:1px solid var(--line); background:var(--card); font-size:16px; }
+  .filters { display:flex; gap:8px; overflow-x:auto; margin:14px -16px 0; padding:0 16px 2px; scrollbar-width:none; }
+  .filters .chip.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-top:14px; }
+  .grid b { text-align:center; font-size:11px; font-weight:600; color:var(--soft); padding-bottom:4px; }
+  .cell { aspect-ratio:1/1.05; border:0; background:var(--bg); border-radius:10px; padding:5px 4px 4px; display:flex; flex-direction:column; align-items:center; gap:3px; font-size:13px; font-weight:500; min-width:0; }
+  .cell.past { color:#9CA3AF; }
+  .cell.today .n { background:var(--accent); color:#fff; }
+  .cell.sel { box-shadow:inset 0 0 0 2px var(--ink); }
+  .cell .n { width:24px; height:24px; line-height:24px; border-radius:50%; text-align:center; }
+  .cell i { display:block; width:100%; height:5px; border-radius:3px; }
+  i.good { background:var(--good); } i.care { background:var(--care); } i.key { background:var(--key); }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:12px; font-size:12px; color:var(--soft); }
+  .legend i { display:inline-block; width:14px; height:5px; border-radius:3px; margin-right:6px; vertical-align:middle; }
+  .side { display:grid; gap:16px; align-content:start; }
+  .side h2 { font-size:17px; font-weight:700; }
+  .sub { font-size:13px; color:var(--soft); margin-top:2px; }
+  .ev { margin-top:12px; padding:12px; border-radius:12px; }
+  .ev.good { background:var(--goodbg); } .ev.care { background:var(--carebg); } .ev.key { background:var(--keybg); }
+  .ev .t { font-size:12px; font-weight:700; }
+  .ev.good .t { color:var(--good); } .ev.care .t { color:var(--care); } .ev.key .t { color:var(--key); }
+  .ev h3 { font-size:16px; font-weight:600; margin-top:2px; }
+  .ev p { font-size:14px; margin-top:4px; color:#30343B; }
+  .ev .foot { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:#4B5563; }
+  .ev .foot button { border:0; background:rgba(255,255,255,.75); border-radius:8px; padding:6px 10px; font-size:12px; font-weight:600; }
+  .none { margin-top:12px; font-size:14px; color:var(--soft); }
+  .next { margin-top:10px; padding:10px 12px; border:1px dashed var(--line); border-radius:12px; font-size:14px; width:100%; text-align:left; background:none; }
+  .theme p { font-size:14px; color:#30343B; margin-top:6px; }
+  .row { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px; font-size:13px; color:var(--soft); }
+  .primary { background:var(--accent); color:#fff; border:0; border-radius:10px; padding:9px 14px; font-weight:600; font-size:13px; white-space:nowrap; }
+  .tabs { position:fixed; inset:auto 0 0 0; display:grid; grid-template-columns:repeat(3,1fr); background:var(--card); border-top:1px solid var(--line); text-align:center; font-size:12px; font-weight:500; }
+  .tabs a { padding:12px 0 14px; color:var(--soft); text-decoration:none; }
+  .tabs a::before { content:''; display:block; width:20px; height:20px; margin:0 auto 4px; border-radius:6px; border:2px solid currentColor; }
+  .tabs a.on { color:var(--accent); }
+  @media (min-width:860px) {
+    body { padding-bottom:0; } .tabs { display:none; } .top nav { display:flex; }
+    main { grid-template-columns:minmax(0,1fr) 360px; padding:24px 16px; }
+    .cell { aspect-ratio:auto; height:84px; align-items:stretch; padding:8px; font-size:14px; } .cell .n { align-self:flex-start; }
+  }
+</style>
+</head>
+<body>
+<header class="top"><div>
+  <span class="brand">Moroscope</span>
+  <nav><a class="on" href="#">Calendar</a><a href="#">Sources</a><a href="#">Profile</a></nav>
+  <span class="chip" id="who"></span>
+</div></header>
+<main>
+  <section class="card">
+    <div class="monthbar"><h1 id="title"></h1><div class="arrows"><button aria-label="Previous month">&lsaquo;</button> <button aria-label="Next month">&rsaquo;</button></div></div>
+    <div class="filters" id="filters"></div>
+    <div class="grid" id="grid"></div>
+    <div class="legend"><span><i class="good"></i>Good time to</span><span><i class="care"></i>Be careful</span><span><i class="key"></i>Key date</span></div>
+  </section>
+  <div class="side">
+    <section class="card" id="day"></section>
+    <section class="card theme"><h2>The month in short</h2><p id="theme"></p>
+      <div class="row"><span id="updated"></span><button class="primary">Add month to calendar</button></div></section>
+  </div>
+</main>
+<nav class="tabs"><a class="on" href="#">Calendar</a><a href="#">Sources</a><a href="#">Profile</a></nav>
+<script src="data.js"></script>
+<script>
+  const M = window.MOCK, $ = (id) => document.getElementById(id);
+  let topic = 'All', sel = M.today;
+  const shown = (d) => M.on(d).filter((e) => topic === 'All' || e.topics.includes(topic));
+  $('who').textContent = `${M.glyph} ${M.sign}`;
+  $('title').textContent = `${M.month} ${M.year}`;
+  $('theme').textContent = M.theme;
+  $('updated').textContent = `${M.usedCount} of ${M.sources.length} sources · updated today`;
+  function render() {
+    $('filters').innerHTML = ['All', ...M.topics].map((t) => `<button class="chip${t === topic ? ' on' : ''}" data-topic="${t}">${t}</button>`).join('');
+    let g = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => `<b>${d}</b>`).join('') + '<span></span>'.repeat((M.dow(1) + 6) % 7);
+    for (let d = 1; d <= M.days; d++) {
+      const cls = [d < M.today ? 'past' : '', d === M.today ? 'today' : '', d === sel ? 'sel' : ''].join(' ');
+      g += `<button class="cell ${cls}" data-day="${d}" aria-label="${d} ${M.month}"><span class="n">${d}</span>${shown(d).map((e) => `<i class="${e.type}"></i>`).join('')}</button>`;
+    }
+    $('grid').innerHTML = g;
+    const evs = shown(sel);
+    let h = `<h2>${M.wd(sel)} ${sel} ${M.month}${sel === M.today ? ' · today' : ''}</h2><div class="sub">${evs.length ? `${evs.length} thing${evs.length > 1 ? 's' : ''} to know` : ''}</div>`;
+    h += evs.map((e) => `<div class="ev ${e.type}"><div class="t">${M.typeLabel[e.type]} · ${M.range(e)}</div><h3>${e.title}</h3><p>${e.summary}</p>
+      <div class="foot"><span>${e.topics.join(', ')} · ${e.sources.join(', ')}</span><button>Add to calendar</button></div></div>`).join('');
+    if (!evs.length) {
+      const next = M.events.find((e) => e.from > sel && (topic === 'All' || e.topics.includes(topic)));
+      h += `<p class="none">No source wrote about this day. That is not a bad sign, just a quiet one.</p>`;
+      if (next) h += `<button class="next" data-day="${next.from}"><b>Next:</b> ${next.title} · ${M.range(next)}</button>`;
+    }
+    $('day').innerHTML = h;
+  }
+  document.addEventListener('click', (ev) => {
+    const el = ev.target.closest('[data-day],[data-topic]');
+    if (!el) return;
+    if (el.dataset.day) sel = +el.dataset.day; else topic = el.dataset.topic;
+    render();
+  });
+  render();
+</script>
+</body>
+</html>

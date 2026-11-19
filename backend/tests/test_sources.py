@@ -98,13 +98,13 @@ async def test_gather_reports_on_every_source_and_keeps_the_others_when_one_fail
     gathered = await gather_documents(deps, select_sources(SourcesConfig())[1], SCORPIO)
 
     assert [(e["id"], e["status"], e["documents"]) for e in gathered.report] == [
-        ("rux-youtube", "used", 2),
+        ("rux-youtube", "used", 1),
         ("cafe-astrology", "no_forecast", 0),
         ("astrology-zone", "used", 1),
         ("astrostyle", "failed", 0),
         ("sally-kirkman", "used", 1),
     ]
-    assert gathered.used == 3 and len(gathered.documents) == 4
+    assert gathered.used == 3 and len(gathered.documents) == 3
     assert gathered.report[1]["reason"] == "No forecast for November 2026 was found."
     assert gathered.report[3]["reason"] == "The site answered with HTTP 404."
     assert all(e["origin"] == "curated" and e["name"] and e["url"] for e in gathered.report)

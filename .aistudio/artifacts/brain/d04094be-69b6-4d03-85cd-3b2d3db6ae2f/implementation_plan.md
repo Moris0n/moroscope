@@ -20,7 +20,9 @@ Astrology is framed as interpretive planning guidance, never as prediction, fina
 | YouTube | Channel RSS feed + per-sign timestamps + unofficial transcript download (`youtube-transcript-api`) |
 | User sources | Exclusive: if the user added sources, only those are used |
 | Energy charts | Hidden for now (they run on fake data); rebuilt later on real transits |
-| Categories | 10 house-based life areas, replacing both current lists |
+| Categories | 10 house-based life areas, replacing both earlier lists (done) |
+| Forecast storage | On the device: the latest forecast per month, as versioned records |
+| Month review (future) | On the device only, with an export / import file; no database before accounts |
 
 ---
 
@@ -85,25 +87,25 @@ Every event cites at least one retrieved URL (the existing guarantee stays). Per
 
 ### F3. Life areas
 
-One taxonomy, used for profile focus, LLM tagging, map rows, filters and calendar export. It replaces both `ActivityCategory` and `LifePriority`.
+One taxonomy, used for profile focus, LLM tagging, map rows, filters and calendar export. It replaced both `ActivityCategory` and `LifePriority`.
 
-| Life area | Houses | Examples of "good time to…" and cautions |
-|---|---|---|
-| Career & Work | 10, 6 | apply for jobs, pitch, ask for a raise, start a project |
-| Money & Resources | 2, 8 | big purchases, investing, budgeting; caution on impulse spending |
-| Love & Relationships | 5, 7 | dates, important conversations, commitments |
-| Family & Home | 4 (+5 for kids) | family time, moving, home projects, parenting focus |
-| Health & Wellbeing | 6, 1 | start a routine, check-ups, recovery |
-| Friends & Community | 11 | networking, events, asking for help |
-| Communication & Contracts | 3 (+ Mercury) | signing, negotiating, key emails; Mercury retrograde cautions |
-| Learning & Travel | 9 | courses, exams, trips |
-| Creativity & Fun | 5 | hobbies, creative launches, play |
-| Rest & Inner Life | 12, 8 | rest windows, reflection, letting go |
+| Life area | Id | Houses | Examples of "good time to…" and cautions |
+|---|---|---|---|
+| Career & Work | `career` | 10, 6 | apply for jobs, pitch, ask for a raise, start a project |
+| Money & Resources | `money` | 2, 8 | big purchases, investing, budgeting; caution on impulse spending |
+| Love & Relationships | `love` | 5, 7 | dates, important conversations, commitments |
+| Family & Home | `family` | 4 (+5 for kids) | family time, moving, home projects, parenting focus |
+| Health & Wellbeing | `health` | 6, 1 | start a routine, check-ups, recovery |
+| Friends & Community | `community` | 11 | networking, events, asking for help |
+| Communication & Contracts | `communication` | 3 (+ Mercury) | signing, negotiating, key emails; Mercury retrograde cautions |
+| Learning & Travel | `learning` | 9 | courses, exams, trips |
+| Creativity & Fun | `creativity` | 5 | hobbies, creative launches, play |
+| Rest & Inner Life | `rest` | 12, 8 | rest windows, reflection, letting go |
 
 **Event types**
-- Key date
-- Good time to…
-- Be careful
+- Key date (`keyDate`)
+- Good time to… (`goodTime`)
+- Be careful (`caution`)
 - Sky event (from the ephemeris, Phase 4)
 
 Life context boosts relevance. For example, "looking for a job" ranks Career events higher and phrases them as job-search actions; "has kids" adds a parenting angle to Family & Home.
@@ -126,6 +128,15 @@ Life context boosts relevance. For example, "looking for a job" ranks Career eve
 - Generated deterministically on the server, never by the LLM.
 
 The month picker defaults to the current or next month.
+
+### F4b. Month review (later)
+
+After the month, the user looks back: a short questionnaire or reflection on what really took place, per event ("happened / didn't") and overall.
+
+- Reviews refer to events by their id (assigned by the server since Phase 3a). An id changes when a forecast is regenerated and the model words the title differently; the feature has to decide what happens to a review then.
+- Stored on the device only, inside the month's forecast record (the record is versioned for this). A month with a review is never pruned.
+- Needs an "export my data" / "import" file: a forecast can be regenerated, a review cannot. The same file is the migration path into a database once accounts exist.
+- A review goes to the AI service only with the same kind of consent as the life context.
 
 ### F5. Real sky layer (later)
 
@@ -165,7 +176,7 @@ Login, server-side encrypted profiles, multi-device sync, forecast history.
 **Frontend**
 - React + Vite PWA (stack unchanged).
 - Profile and sources in local storage; renders the map and calendar; downloads `.ics`.
-- TypeScript types generated from the backend OpenAPI schema (for example `openapi-typescript`).
+- TypeScript types generated from the backend models: a JSON Schema export plus `json-schema-to-typescript` (`openapi-typescript` needs TypeScript 5; the repo is on 7).
 
 **Backend**
 - Python 3.12+, FastAPI + Uvicorn, Pydantic v2 models.
@@ -204,8 +215,9 @@ Login, server-side encrypted profiles, multi-device sync, forecast history.
   - `lifeContext`: `{ relationship, lookingForPartner, work, kids, family, moneyFocus, healthFocus, goals, upcomingEvents[] }`
   - `focusAreas`: `LifeArea[]`
 - **Source**: `id`, `name`, `domain` / `url`, `type`, `language`, `origin` (`'curated' | 'user'`), `active`
-- **ForecastEvent**: `date`, `endDate?`, `title`, `type`, `lifeAreas[]`, `summary`, `personalNote`, `sourceUrls[]`
-- **MonthlyForecast**: `month`, `theme`, `keyDates[]`, `events[]`, `evidenceNote`, `generatedAt`
+- **ForecastEvent**: `id`, `date`, `endDate?`, `title`, `type`, `lifeAreas[]`, `summary`, `personalNote?`, `sourceUrls[]` (as built in Phase 3a)
+- **MonthlyForecast**: `theme`, `events[]`, `icsContent` now; `keyDates[]` and `evidenceNote` come with the month overview (3b)
+- **Stored forecast record** (device): `version`, `month`, `forecast` (`result`, `generatedAt`, `sign`, `mode`, `focusAreas`, source report, evidence); a `review` is added later
 
 ---
 
@@ -222,7 +234,7 @@ Login, server-side encrypted profiles, multi-device sync, forecast history.
 - Split `App.tsx`.
 - Hide the fake energy charts.
 
-Notes from the port: validation is still hand-written (a 1:1 port of the TypeScript checks), and SSE uses Starlette's `StreamingResponse` instead of `sse-starlette`. Pydantic models and generated TypeScript types are deferred to Phase 3, when the data model changes.
+Notes from the port: validation was hand-written (a 1:1 port of the TypeScript checks) until Phase 3a moved it to Pydantic models, and SSE uses Starlette's `StreamingResponse` instead of `sse-starlette`.
 
 ### Phase 1: Profile and real chart
 - Birth-place search and geocoding (done: bundled GeoNames city list, `GET /api/places`).
@@ -237,10 +249,20 @@ Notes from the port: validation is still hand-written (a 1:1 port of the TypeScr
 - Onboarding with personalised / general mode; life context sent to the forecast agent.
 
 ### Phase 3: Life areas and monthly output
-- Taxonomy end to end (Pydantic models, prompts, TypeScript types).
-- Calendar grid and "Good time to…" list.
-- Personal notes.
-- Per-event and filtered `.ics`.
+
+**3a: taxonomy and data model (done)**
+- The 10 life areas and 3 event types end to end: Pydantic models for every request, answer and response, prompts, TypeScript types generated from the models (`npm run gen:types`).
+- Personal notes (only when a life context was sent), stable server-assigned event ids.
+- The latest forecast per month kept on the device.
+- Open: the new prompt has not been judged on a real run yet.
+
+**3b: views**
+- Month overview (theme, top key dates, evidence note), calendar grid, "Good time to…" list, event detail.
+
+**3c: export**
+- Per-event and filtered `.ics`, optional reminder.
+
+**Later, not scheduled:** month review (F4b).
 
 ### Phase 4: Real sky layer
 - Sky events, cross-checking, rebuilt energy charts.

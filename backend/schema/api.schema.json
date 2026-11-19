@@ -1,0 +1,818 @@
+{
+  "$defs": {
+    "ChartPlace": {
+      "properties": {
+        "lat": {
+          "maximum": 90,
+          "minimum": -90,
+          "type": "number"
+        },
+        "lon": {
+          "maximum": 180,
+          "minimum": -180,
+          "type": "number"
+        },
+        "tz": {
+          "maxLength": 100,
+          "type": "string"
+        }
+      },
+      "required": [
+        "tz"
+      ],
+      "title": "ChartPlace",
+      "type": "object"
+    },
+    "ChartRequestBody": {
+      "properties": {
+        "birthDate": {
+          "type": "string"
+        },
+        "birthTime": {
+          "type": "string"
+        },
+        "place": {
+          "$ref": "#/$defs/ChartPlace"
+        },
+        "timeKnown": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "birthDate",
+        "timeKnown",
+        "place"
+      ],
+      "title": "ChartRequestBody",
+      "type": "object"
+    },
+    "ChartResponse": {
+      "properties": {
+        "moon": {
+          "enum": [
+            "Aries",
+            "Taurus",
+            "Gemini",
+            "Cancer",
+            "Leo",
+            "Virgo",
+            "Libra",
+            "Scorpio",
+            "Sagittarius",
+            "Capricorn",
+            "Aquarius",
+            "Pisces"
+          ],
+          "type": "string"
+        },
+        "moonUncertain": {
+          "type": "boolean"
+        },
+        "rising": {
+          "enum": [
+            "Aries",
+            "Taurus",
+            "Gemini",
+            "Cancer",
+            "Leo",
+            "Virgo",
+            "Libra",
+            "Scorpio",
+            "Sagittarius",
+            "Capricorn",
+            "Aquarius",
+            "Pisces"
+          ],
+          "type": "string"
+        },
+        "sun": {
+          "enum": [
+            "Aries",
+            "Taurus",
+            "Gemini",
+            "Cancer",
+            "Leo",
+            "Virgo",
+            "Libra",
+            "Scorpio",
+            "Sagittarius",
+            "Capricorn",
+            "Aquarius",
+            "Pisces"
+          ],
+          "type": "string"
+        },
+        "sunUncertain": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sun",
+        "moon",
+        "sunUncertain",
+        "moonUncertain"
+      ],
+      "title": "ChartResponse",
+      "type": "object"
+    },
+    "CuratedSourceInfo": {
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "cadence": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "video",
+            "website"
+          ],
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "author",
+        "type",
+        "url",
+        "language",
+        "cadence"
+      ],
+      "title": "CuratedSourceInfo",
+      "type": "object"
+    },
+    "CuratedSourcesResponse": {
+      "properties": {
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/CuratedSourceInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "sources"
+      ],
+      "title": "CuratedSourcesResponse",
+      "type": "object"
+    },
+    "ErrorResponse": {
+      "properties": {
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "title": "ErrorResponse",
+      "type": "object"
+    },
+    "Evidence": {
+      "properties": {
+        "gap": {
+          "type": "boolean"
+        },
+        "mode": {
+          "enum": [
+            "user",
+            "curated",
+            "web"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "gap"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "ForecastEvent": {
+      "properties": {
+        "date": {
+          "type": "string"
+        },
+        "endDate": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "lifeAreas": {
+          "items": {
+            "enum": [
+              "career",
+              "money",
+              "love",
+              "family",
+              "health",
+              "community",
+              "communication",
+              "learning",
+              "creativity",
+              "rest"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "personalNote": {
+          "maxLength": 1000,
+          "type": "string"
+        },
+        "sourceUrls": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "summary": {
+          "maxLength": 4000,
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "keyDate",
+            "goodTime",
+            "caution"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "date",
+        "title",
+        "type",
+        "lifeAreas",
+        "summary",
+        "sourceUrls",
+        "id"
+      ],
+      "title": "ForecastEvent",
+      "type": "object"
+    },
+    "ForecastResponse": {
+      "properties": {
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/MonthlyForecast"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/SourceReport"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "result",
+        "profileId",
+        "sources",
+        "evidence"
+      ],
+      "title": "ForecastResponse",
+      "type": "object"
+    },
+    "GeneralProfile": {
+      "description": "A forecast for a sign: nothing else is asked, read or kept.",
+      "properties": {
+        "focusAreas": {
+          "default": [],
+          "items": {
+            "enum": [
+              "career",
+              "money",
+              "love",
+              "family",
+              "health",
+              "community",
+              "communication",
+              "learning",
+              "creativity",
+              "rest"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "const": "general",
+          "type": "string"
+        },
+        "sunSign": {
+          "enum": [
+            "Aries",
+            "Taurus",
+            "Gemini",
+            "Cancer",
+            "Leo",
+            "Virgo",
+            "Libra",
+            "Scorpio",
+            "Sagittarius",
+            "Capricorn",
+            "Aquarius",
+            "Pisces"
+          ],
+          "type": "string"
+        },
+        "targetMonth": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "sunSign",
+        "targetMonth"
+      ],
+      "title": "GeneralProfile",
+      "type": "object"
+    },
+    "LifeContext": {
+      "description": "The user's situation. Every answer is optional. Goes to the forecast agent, never to disk.",
+      "properties": {
+        "caringForParents": {
+          "type": "boolean"
+        },
+        "goals": {
+          "maxLength": 500,
+          "type": "string"
+        },
+        "healthFocus": {
+          "items": {
+            "enum": [
+              "fitness",
+              "sleep",
+              "stress",
+              "nutrition",
+              "habit"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kids": {
+          "items": {
+            "enum": [
+              "none",
+              "trying",
+              "expecting",
+              "under5",
+              "age5to12",
+              "teens",
+              "adult"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "lookingForPartner": {
+          "type": "boolean"
+        },
+        "moneyFocus": {
+          "enum": [
+            "saving",
+            "bigPurchase",
+            "investing",
+            "debt"
+          ],
+          "type": "string"
+        },
+        "relationship": {
+          "enum": [
+            "single",
+            "dating",
+            "inRelationship",
+            "married",
+            "separated",
+            "complicated"
+          ],
+          "type": "string"
+        },
+        "upcomingEvents": {
+          "items": {
+            "$ref": "#/$defs/UpcomingEvent"
+          },
+          "type": "array"
+        },
+        "work": {
+          "enum": [
+            "employed",
+            "jobSeeking",
+            "consideringChange",
+            "selfEmployed",
+            "student",
+            "parentalLeave",
+            "retired"
+          ],
+          "type": "string"
+        }
+      },
+      "title": "LifeContext",
+      "type": "object"
+    },
+    "MonthlyForecast": {
+      "properties": {
+        "events": {
+          "items": {
+            "$ref": "#/$defs/ForecastEvent"
+          },
+          "type": "array"
+        },
+        "icsContent": {
+          "type": "string"
+        },
+        "theme": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "theme",
+        "events",
+        "icsContent"
+      ],
+      "title": "MonthlyForecast",
+      "type": "object"
+    },
+    "PersonalProfile": {
+      "properties": {
+        "birthDate": {
+          "type": "string"
+        },
+        "birthLocation": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "birthTime": {
+          "default": "",
+          "type": "string"
+        },
+        "birthTimezone": {
+          "maxLength": 100,
+          "type": "string"
+        },
+        "focusAreas": {
+          "default": [],
+          "items": {
+            "enum": [
+              "career",
+              "money",
+              "love",
+              "family",
+              "health",
+              "community",
+              "communication",
+              "learning",
+              "creativity",
+              "rest"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "hasExactTime": {
+          "type": "boolean"
+        },
+        "lifeContext": {
+          "$ref": "#/$defs/LifeContext"
+        },
+        "mode": {
+          "const": "personal",
+          "default": "personal",
+          "type": "string"
+        },
+        "moonSign": {
+          "enum": [
+            "Aries",
+            "Taurus",
+            "Gemini",
+            "Cancer",
+            "Leo",
+            "Virgo",
+            "Libra",
+            "Scorpio",
+            "Sagittarius",
+            "Capricorn",
+            "Aquarius",
+            "Pisces"
+          ],
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 120,
+          "type": "string"
+        },
+        "operatingTimezone": {
+          "maxLength": 100,
+          "type": "string"
+        },
+        "risingSign": {
+          "enum": [
+            "Aries",
+            "Taurus",
+            "Gemini",
+            "Cancer",
+            "Leo",
+            "Virgo",
+            "Libra",
+            "Scorpio",
+            "Sagittarius",
+            "Capricorn",
+            "Aquarius",
+            "Pisces"
+          ],
+          "type": "string"
+        },
+        "sunSign": {
+          "enum": [
+            "Aries",
+            "Taurus",
+            "Gemini",
+            "Cancer",
+            "Leo",
+            "Virgo",
+            "Libra",
+            "Scorpio",
+            "Sagittarius",
+            "Capricorn",
+            "Aquarius",
+            "Pisces"
+          ],
+          "type": "string"
+        },
+        "targetMonth": {
+          "type": "string"
+        },
+        "useRisingPrimary": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "birthDate",
+        "hasExactTime",
+        "birthLocation",
+        "birthTimezone",
+        "operatingTimezone",
+        "sunSign",
+        "moonSign",
+        "useRisingPrimary",
+        "targetMonth"
+      ],
+      "title": "PersonalProfile",
+      "type": "object"
+    },
+    "Place": {
+      "properties": {
+        "country": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "lat": {
+          "type": "number"
+        },
+        "lon": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string"
+        },
+        "region": {
+          "type": "string"
+        },
+        "tz": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "name",
+        "region",
+        "country",
+        "lat",
+        "lon",
+        "tz"
+      ],
+      "title": "Place",
+      "type": "object"
+    },
+    "PlacesResponse": {
+      "properties": {
+        "results": {
+          "items": {
+            "$ref": "#/$defs/Place"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "results"
+      ],
+      "title": "PlacesResponse",
+      "type": "object"
+    },
+    "ProfileSaveRequest": {
+      "properties": {
+        "profile": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/GeneralProfile"
+            },
+            {
+              "$ref": "#/$defs/PersonalProfile"
+            }
+          ]
+        },
+        "profileId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "title": "ProfileSaveRequest",
+      "type": "object"
+    },
+    "ProfileSaveResponse": {
+      "properties": {
+        "profileId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "profileId"
+      ],
+      "title": "ProfileSaveResponse",
+      "type": "object"
+    },
+    "SourceReport": {
+      "description": "What happened to one source while a forecast was generated.",
+      "properties": {
+        "documents": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "curated",
+            "user",
+            "web"
+          ],
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "used",
+            "no_forecast",
+            "failed"
+          ],
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "url",
+        "origin",
+        "status",
+        "documents"
+      ],
+      "title": "SourceReport",
+      "type": "object"
+    },
+    "SourcesRequest": {
+      "description": "The choices on the Sources tab. Active user sources are used instead of the default ones.",
+      "properties": {
+        "disabledCurated": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "includeCurated": {
+          "default": false,
+          "type": "boolean"
+        },
+        "user": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/UserSourceRequest"
+          },
+          "type": "array"
+        }
+      },
+      "title": "SourcesRequest",
+      "type": "object"
+    },
+    "SynthesizeRequest": {
+      "properties": {
+        "customExcerpt": {
+          "maxLength": 8000,
+          "type": "string"
+        },
+        "profile": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/GeneralProfile"
+            },
+            {
+              "$ref": "#/$defs/PersonalProfile"
+            }
+          ]
+        },
+        "profileId": {
+          "type": "string"
+        },
+        "sources": {
+          "$ref": "#/$defs/SourcesRequest"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "title": "SynthesizeRequest",
+      "type": "object"
+    },
+    "UpcomingEvent": {
+      "properties": {
+        "date": {
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 120,
+          "type": "string"
+        }
+      },
+      "required": [
+        "date",
+        "label"
+      ],
+      "title": "UpcomingEvent",
+      "type": "object"
+    },
+    "UserSourceRequest": {
+      "properties": {
+        "active": {
+          "default": true,
+          "type": "boolean"
+        },
+        "id": {
+          "default": "",
+          "maxLength": 64,
+          "type": "string"
+        },
+        "url": {
+          "maxLength": 500,
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "UserSourceRequest",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Generated from backend/app/models.py. Do not edit.",
+  "title": "MoroscopeApi"
+}

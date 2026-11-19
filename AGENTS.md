@@ -9,6 +9,9 @@
 ## Commands
 - Frontend: `npm run dev` (port 3000, proxies `/api` to port 8000), `npm run lint` (tsc),
   `npm test`, `npm run build`.
+- After changing `backend/app/models.py`: `npm run gen:types`. It rewrites
+  `backend/schema/api.schema.json` and `src/types/api.generated.ts` (both committed, never edited
+  by hand); a backend test fails while the schema is out of date.
 - Backend: `npm run dev:api` (or `cd backend && uv run python -m app --reload`),
   `npm run test:api` (or `cd backend && uv run pytest`),
   `cd backend && uv run ruff check . && uv run ruff format --check .`.
@@ -39,8 +42,15 @@
 - Source texts are cached under `DATA_DIR/cache/sources/` (7 days; 6 hours for "not published
   yet"). Delete that directory to force a re-read.
 - Privacy rule, covered by tests: name, birth date, time and place never go to Nebius or Tavily.
-  The forecast agent gets signs, focus topics and (personal mode) the life context; the life
-  context is never written to `data/profiles`.
+  The forecast agent gets signs, focus areas and (personal mode) the life context; the life
+  context is never written to `data/profiles`. Validation errors name the field and never repeat
+  the submitted value (`models.error_messages`).
+- One taxonomy everywhere: the 10 life areas and 3 event types in `backend/app/models.py`
+  (`LifeArea`, `EventType`). The frontend labels in `src/utils/forecastShared.ts` and the list in
+  `FORECAST_AGENT_PROMPT` must name the same ids.
+- Generated forecasts are kept in the browser only (`moroscope_forecasts_v1`, one versioned record
+  per month, `src/utils/forecastStore.ts`). They hold personal notes: nothing of them is stored on
+  the server.
 - `backend/notebooks/forecast_walkthrough.ipynb` runs the pipeline step by step for a profile in
   `data/profiles` and prints the source texts, the prompt, the raw LLM answer and the validation
   result (kernel: `backend/.venv`). Reading the sites is free; the Nebius call only runs with

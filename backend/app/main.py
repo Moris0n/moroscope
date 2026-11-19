@@ -15,20 +15,26 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from pydantic import ValidationError
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .chart import ChartCalculator
 from .config import PipelineError, load_allowed_hosts
+from .models import (
+    ApiModel,
+    ChartRequestBody,
+    ChartResponse,
+    CuratedSourcesResponse,
+    PlacesResponse,
+    ProfileSaveRequest,
+    ProfileSaveResponse,
+    SynthesizeRequest,
+    error_messages,
+)
 from .pipeline import PipelineDeps, run_forecast_pipeline, save_profile_snapshot
 from .places import search_places
-from .sources import curated_sources_public, validate_sources_config
-from .validation import (
-    MAX_EXCERPT_LENGTH,
-    is_utf8_safe,
-    is_uuid,
-    validate_chart_request,
-    validate_user_profile,
-)
+from .sources import curated_sources_public, sources_config
+from .validation import is_utf8_safe
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MAX_BODY_BYTES = 2 * 1024 * 1024
@@ -94,13 +100,19 @@ async def _read_json_body(request: Request) -> dict[str, Any] | JSONResponse:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def _validate_profile_request(body: dict[str, Any]) -> JSONResponse | None:
-    errors = validate_user_profile(body.get("profile"))
-    if errors:
-        return _error(400, "; ".join(errors))
-    if body.get("profileId") is not None and not is_uuid(body["profileId"]):
-        return _error(400, "profileId must be a valid UUID.")
-    return None
+async def _read_request[M: ApiModel](request: Request, model: type[M]) -> M | JSONResponse:
+    """The JSON body as `model`, or the 4xx answer saying what is wrong with it."""
+    body = await _read_json_body(request)
+    if isinstance(body, JSONResponse):
+        return body
+    try:
+        return model.model_validate(body)
+    except ValidationError as exc:
+        return _error(400, "; ".join(error_messages(exc)))
+
+
+def _json(model: ApiModel) -> JSONResponse:
+    return JSONResponse(model.to_json())
 
 
 def _pipeline_failure(exc: BaseException) -> tuple[int, str]:
@@ -133,69 +145,53 @@ def create_app(
 
     @app.get("/api/places")
     async def places(q: str = "") -> Response:
-        return JSONResponse({"results": await asyncio.to_thread(search_places, q)})
+        return _json(PlacesResponse(results=await asyncio.to_thread(search_places, q)))
 
     @app.get("/api/sources/curated")
     async def curated_sources() -> Response:
-        return JSONResponse({"sources": curated_sources_public()})
+        return _json(CuratedSourcesResponse(sources=curated_sources_public()))
 
     @app.post("/api/chart")
     async def compute_chart(request: Request) -> Response:
-        body = await _read_json_body(request)
+        body = await _read_request(request, ChartRequestBody)
         if isinstance(body, JSONResponse):
             return body
-        errors, chart_request = validate_chart_request(body)
-        if errors or chart_request is None:
-            return _error(400, "; ".join(errors))
         try:
-            return JSONResponse(await asyncio.to_thread(calculator.compute, chart_request))
+            chart = await asyncio.to_thread(calculator.compute, body.to_request())
+            return _json(ChartResponse(**chart))
         except PipelineError as exc:
             return _error(exc.status, exc.message)
 
     @app.post("/api/profiles")
     async def save_profile(request: Request) -> Response:
-        body = await _read_json_body(request)
+        body = await _read_request(request, ProfileSaveRequest)
         if isinstance(body, JSONResponse):
             return body
-        if invalid := _validate_profile_request(body):
-            return invalid
         try:
-            profile_id, _ = await save_profile_snapshot(
-                deps, body["profile"], body.get("profileId")
-            )
+            profile_id, _ = await save_profile_snapshot(deps, body.profile, body.profile_id)
         except PipelineError as exc:
             return _error(exc.status, exc.message)
         except (OSError, ValueError):
             return _error(500, "Failed to save profile.")
-        return JSONResponse({"profileId": profile_id})
+        return _json(ProfileSaveResponse(profile_id=profile_id))
 
     @app.post("/api/horoscope/synthesize")
     async def synthesize(request: Request) -> Response:
-        body = await _read_json_body(request)
+        body = await _read_request(request, SynthesizeRequest)
         if isinstance(body, JSONResponse):
             return body
-        if invalid := _validate_profile_request(body):
-            return invalid
-        excerpt = body.get("customExcerpt")
-        if excerpt is not None and (
-            not isinstance(excerpt, str) or len(excerpt) > MAX_EXCERPT_LENGTH
-        ):
-            return _error(400, "customExcerpt must be a bounded string.")
-        source_errors, sources = validate_sources_config(body.get("sources"))
-        if source_errors:
-            return _error(400, "; ".join(source_errors))
 
         events: asyncio.Queue[tuple[str, Any] | None] = asyncio.Queue()
 
         async def run() -> dict[str, Any]:
             async with asyncio.timeout(deps.timeout_seconds):
                 return await run_forecast_pipeline(
-                    body["profile"],
-                    excerpt,
+                    body.profile,
+                    body.custom_excerpt,
                     deps,
                     lambda step: events.put_nowait(("progress", {"step": step})),
-                    body.get("profileId"),
-                    sources,
+                    body.profile_id,
+                    sources_config(body.sources),
                 )
 
         task = asyncio.create_task(run())

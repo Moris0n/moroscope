@@ -1,4 +1,5 @@
 import { NatalChart, UserProfile } from '../types/astrology';
+import type { ChartRequestBody } from '../types/api.generated';
 import { isValidBirthTime, parseIsoDate } from './forecastShared';
 
 export const MIN_BIRTH_YEAR = 1900;
@@ -16,7 +17,7 @@ export function chartBasis(profile: UserProfile): string | null {
   if (profile.hasExactTime && !isValidBirthTime(profile.birthTime)) return null;
   const place = profile.birthPlace;
   const hasCoordinates = !!place && place.tz === profile.birthTimezone;
-  return JSON.stringify({
+  const body: ChartRequestBody = {
     birthDate: profile.birthDate,
     birthTime: profile.hasExactTime ? profile.birthTime : undefined,
     timeKnown: profile.hasExactTime,
@@ -25,7 +26,8 @@ export function chartBasis(profile: UserProfile): string | null {
       lat: hasCoordinates ? place.lat : undefined,
       lon: hasCoordinates ? place.lon : undefined,
     },
-  });
+  };
+  return JSON.stringify(body);
 }
 
 /** Replace the profile's signs (including manual overrides) with a freshly calculated chart. */

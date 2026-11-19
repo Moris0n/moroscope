@@ -13,8 +13,10 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
 
+from pydantic import ValidationError
+
 from .config import PipelineDeps
-from .validation import is_http_url
+from .models import SourcesRequest, error_messages
 from .webpages import (
     MAX_DOCUMENT_LENGTH,
     NoForecast,
@@ -30,8 +32,6 @@ from .youtube import is_youtube_url, youtube_channel, youtube_url
 
 Reader = Callable[[PipelineDeps, Target], Awaitable[list[dict[str, str]]]]
 
-MAX_USER_SOURCES = 10
-MAX_SOURCE_URL_LENGTH = 500
 MAX_TOTAL_DOCUMENT_LENGTH = 90000
 MIN_TRIMMED_DOCUMENT_LENGTH = 4000
 SOURCE_TIMEOUT_SECONDS = 60.0
@@ -127,56 +127,30 @@ class SourcesConfig:
     include_curated: bool = False
 
 
+def sources_config(request: SourcesRequest | None) -> SourcesConfig:
+    """The active user sources (one per page) and the curated ones that are switched off."""
+    if request is None:
+        return SourcesConfig()
+    active: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for source in request.user:
+        key = _url_key(source.url)
+        if source.active and key not in seen:
+            seen.add(key)
+            active.append((source.id or source.url, source.url))
+    return SourcesConfig(
+        frozenset(request.disabled_curated) & _CURATED_IDS, tuple(active), request.include_curated
+    )
+
+
 def validate_sources_config(value: Any) -> tuple[list[str], SourcesConfig | None]:
     """Validate the `sources` part of a forecast request. Returns (errors, config)."""
     if value is None:
         return [], SourcesConfig()
-    if not isinstance(value, dict):
-        return ["sources must be an object"], None
-    errors: list[str] = []
-
-    disabled = value.get("disabledCurated", [])
-    if (
-        not isinstance(disabled, list)
-        or len(disabled) > 50
-        or not all(isinstance(item, str) for item in disabled)
-    ):
-        errors.append("sources.disabledCurated must be a short array of strings")
-        disabled = []
-
-    include_curated = value.get("includeCurated", False)
-    if not isinstance(include_curated, bool):
-        errors.append("sources.includeCurated must be a boolean")
-
-    raw_user = value.get("user", [])
-    active: list[tuple[str, str]] = []
-    if not isinstance(raw_user, list) or len(raw_user) > MAX_USER_SOURCES:
-        errors.append(f"sources.user must be an array of at most {MAX_USER_SOURCES} sources")
-        raw_user = []
-    seen: set[str] = set()
-    for index, item in enumerate(raw_user):
-        label = f"sources.user[{index}]"
-        if not isinstance(item, dict):
-            errors.append(f"{label} must be an object")
-            continue
-        url, source_id = item.get("url"), item.get("id", "")
-        if not is_http_url(url) or len(url) > MAX_SOURCE_URL_LENGTH or urlsplit(url).username:
-            errors.append(f"{label}.url must be a plain http(s) URL")
-            continue
-        if not isinstance(source_id, str) or len(source_id) > 64:
-            errors.append(f"{label}.id must be a short string")
-            continue
-        if not isinstance(item.get("active", True), bool):
-            errors.append(f"{label}.active must be a boolean")
-            continue
-        key = _url_key(url)
-        if item.get("active", True) and key not in seen:
-            seen.add(key)
-            active.append((source_id or url, url))
-
-    if errors:
-        return errors, None
-    return [], SourcesConfig(frozenset(disabled) & _CURATED_IDS, tuple(active), include_curated)
+    try:
+        return [], sources_config(SourcesRequest.model_validate(value))
+    except ValidationError as exc:
+        return error_messages(exc, "sources"), None
 
 
 def _url_key(url: str) -> str:

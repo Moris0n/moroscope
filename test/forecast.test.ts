@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   cleanLifeContext,
   defaultTargetMonth,
+  LIFE_AREAS,
   isLegacyProfile,
   isValidBackendUrl,
   isValidForecastShape,
@@ -15,6 +16,7 @@ import {
   profileRequestBody,
   reviveSourceSettings,
   sourcesRequestBody,
+  storedFocusAreas,
   toGeneralProfile,
   toggleKidsStage,
 } from '../src/utils/forecastShared.ts';
@@ -26,7 +28,17 @@ import {
   sourceLabel,
 } from '../src/utils/forecastHelpers.ts';
 import { applyChart, chartBasis } from '../src/utils/chart.ts';
-import { TransitEvent, UserProfile } from '../src/types/astrology.ts';
+import {
+  FORECAST_RECORD_VERSION,
+  ForecastRecord,
+  MAX_STORED_MONTHS,
+  forecastForMonth,
+  pruneForecastRecords,
+  reviveForecastRecords,
+  withForecast,
+} from '../src/utils/forecastStore.ts';
+import { StoredForecast, TransitEvent, UserProfile } from '../src/types/astrology.ts';
+import type { PersonalProfile } from '../src/types/api.generated.ts';
 
 const VALID_PROFILE: UserProfile = {
   mode: 'personal',
@@ -41,20 +53,20 @@ const VALID_PROFILE: UserProfile = {
   moonSign: 'Taurus',
   risingSign: 'Scorpio',
   useRisingPrimary: true,
-  activeCategories: ['career', 'finance'],
   targetMonth: 'November 2026',
-  priorities: ['careerTransition', 'financialPlanning'],
+  focusAreas: ['career', 'money'],
   backendUrl: '',
 };
 
 function validEvent(overrides: Partial<TransitEvent> = {}): TransitEvent {
   return {
+    id: 'a1b2c3d4e5f6',
     date: '2026-11-05',
     title: 'Mars ingress window',
-    impact_type: 'Opportunity',
+    type: 'goodTime',
     summary: 'A sourced transit event.',
-    topics: ['careerTransition'],
-    source_urls: ['https://astro.example/nov-2026'],
+    lifeAreas: ['career'],
+    sourceUrls: ['https://astro.example/nov-2026'],
     ...overrides,
   };
 }
@@ -104,17 +116,18 @@ test('mergeProfileWithDefaults repairs corrupt legacy values', () => {
   const legacy = { name: 'Old User', birthDate: '1990-01-15' };
   const merged = mergeProfileWithDefaults(VALID_PROFILE, legacy);
   assert.equal(merged.targetMonth, VALID_PROFILE.targetMonth);
-  assert.deepEqual(merged.priorities, VALID_PROFILE.priorities);
+  assert.deepEqual(merged.focusAreas, VALID_PROFILE.focusAreas);
   assert.equal(merged.backendUrl, '');
   assert.equal(merged.name, 'Old User');
 
   const corrupt = mergeProfileWithDefaults(VALID_PROFILE, {
     targetMonth: 'garbage',
+    focusAreas: 'nope',
     priorities: 'nope',
     sunSign: 'X',
     moonSign: 5,
     operatingTimezone: 'Mars/Olympus',
-    activeCategories: ['bogus'],
+    activeCategories: ['career'],
     backendUrl: 'https://u:p@h/x?y=1',
     birthTime: '99:99',
   });
@@ -122,56 +135,167 @@ test('mergeProfileWithDefaults repairs corrupt legacy values', () => {
   assert.equal(corrupt.sunSign, VALID_PROFILE.sunSign);
   assert.equal(corrupt.moonSign, VALID_PROFILE.moonSign);
   assert.equal(corrupt.operatingTimezone, VALID_PROFILE.operatingTimezone);
-  assert.deepEqual(corrupt.activeCategories, VALID_PROFILE.activeCategories);
+  assert.deepEqual(corrupt.focusAreas, VALID_PROFILE.focusAreas);
+  assert.equal('activeCategories' in corrupt, false);
+  assert.equal('priorities' in corrupt, false);
   assert.equal(corrupt.backendUrl, '');
   assert.equal(corrupt.birthTime, VALID_PROFILE.birthTime);
 });
 
-test('isValidForecastShape guards the client against malformed results', () => {
-  assert.equal(
-    isValidForecastShape({ overall_theme: 't', events: [], ics_content: 'BEGIN:VCALENDAR\nEND:VCALENDAR' }),
-    true
+test('focus topics stored before the life areas existed are carried over', () => {
+  const old = mergeProfileWithDefaults(VALID_PROFILE, {
+    name: 'Old User',
+    priorities: ['datingRomance', 'contractNegotiations', 'healthHabits', 'madeUp', 'datingRomance'],
+  });
+  assert.deepEqual(old.focusAreas, ['love', 'communication', 'health']);
+  assert.deepEqual(
+    mergeProfileWithDefaults(VALID_PROFILE, {
+      priorities: ['careerTransition', 'financialPlanning'],
+    }).focusAreas,
+    ['career', 'money']
   );
+  // Once a profile has focus areas, the old field is not read again.
+  const current = mergeProfileWithDefaults(VALID_PROFILE, {
+    focusAreas: ['rest', 'bogus', 'rest', 'learning'],
+    priorities: ['datingRomance'],
+  });
+  assert.deepEqual(current.focusAreas, ['rest', 'learning']);
+  assert.deepEqual(mergeProfileWithDefaults(VALID_PROFILE, { focusAreas: [] }).focusAreas, []);
+  assert.deepEqual(storedFocusAreas(null, ['family']), ['family']);
+  assert.equal(LIFE_AREAS.length, 10);
+});
+
+test('isValidForecastShape guards the client against malformed results', () => {
+  const ics = 'BEGIN:VCALENDAR\nEND:VCALENDAR';
+  assert.equal(isValidForecastShape({ theme: 't', events: [], icsContent: ics }), true);
   assert.equal(
-    isValidForecastShape({ overall_theme: 't', events: [validEvent()], ics_content: 'BEGIN:VCALENDAR x' }),
+    isValidForecastShape({
+      theme: 't',
+      events: [validEvent(), validEvent({ id: 'b', endDate: '2026-11-07', personalNote: 'n' })],
+      icsContent: ics,
+    }),
     true
   );
   assert.equal(isValidForecastShape({ events: [] }), false);
   assert.equal(isValidForecastShape('{"a":1}'), false);
+  // The shape of forecasts from before the life areas.
   assert.equal(
-    isValidForecastShape({
-      overall_theme: 't',
-      ics_content: 'BEGIN:VCALENDAR',
-      events: [{ date: 'not-a-date' }],
-    }),
+    isValidForecastShape({ overall_theme: 't', events: [], ics_content: ics }),
+    false
+  );
+  for (const bad of [
+    { date: 'not-a-date' },
+    { id: '' },
+    { id: undefined },
+    { type: 'Opportunity' },
+    { lifeAreas: ['careerTransition'] },
+    { sourceUrls: ['javascript:alert(1)'] },
+    { personalNote: 5 },
+    { endDate: '2026-11-31' },
+  ]) {
+    const events = [{ ...validEvent(), ...bad }];
+    assert.equal(isValidForecastShape({ theme: 't', icsContent: ics, events }), false, JSON.stringify(bad));
+  }
+  // Ids must tell the events of a forecast apart.
+  assert.equal(
+    isValidForecastShape({ theme: 't', icsContent: ics, events: [validEvent(), validEvent()] }),
     false
   );
 });
 
-test('buildMonthlyHeatmap maps inclusive ranges and mixed impacts', () => {
+test('buildMonthlyHeatmap has a row per life area with inclusive ranges and mixed types', () => {
   const range = parseMonthRange('November 2026')!;
   const events: TransitEvent[] = [
-    validEvent({ date: '2026-11-05', end_date: '2026-11-07' }),
-    validEvent({
-      date: '2026-11-06',
-      impact_type: 'Caution',
-      topics: ['careerTransition'],
-    }),
-    validEvent({ date: '2026-11-10', topics: ['financialPlanning'], impact_type: 'Milestone' }),
+    validEvent({ date: '2026-11-05', endDate: '2026-11-07', lifeAreas: ['career', 'love'] }),
+    validEvent({ id: 'b', date: '2026-11-06', type: 'caution' }),
+    validEvent({ id: 'c', date: '2026-11-10', lifeAreas: ['money'], type: 'keyDate' }),
   ];
-  const matrix = buildMonthlyHeatmap(events, range, [
-    'careerTransition',
-    'financialPlanning',
-    'datingRomance',
-  ]);
+  const matrix = buildMonthlyHeatmap(events, range, ['career', 'money', 'love', 'rest']);
   const career = matrix[0];
+  assert.equal(career.length, 30);
   assert.equal(career[4].events.length, 1);
-  assert.equal(career[5].impacts.size, 2);
-  assert.ok(career[5].impacts.has('Caution'));
+  assert.equal(career[5].types.size, 2);
+  assert.ok(career[5].types.has('caution'));
   assert.equal(career[6].events.length, 1);
   assert.equal(career[7].events.length, 0);
-  assert.equal(matrix[1][9].impacts.has('Milestone'), true);
-  assert.equal(matrix[2].every((c) => c.events.length === 0), true);
+  assert.equal(matrix[1][9].types.has('keyDate'), true);
+  assert.deepEqual(matrix[2].filter((c) => c.events.length).map((c) => c.day), [5, 6, 7]);
+  assert.equal(matrix[3].every((c) => c.events.length === 0), true);
+  assert.equal(buildMonthlyHeatmap(events, range, LIFE_AREAS).length, 10);
+});
+
+function storedForecast(month: string, generatedAt: string, overrides: Partial<StoredForecast> = {}): StoredForecast {
+  return {
+    result: { theme: `Theme of ${month}`, events: [validEvent()], icsContent: 'BEGIN:VCALENDAR' },
+    generatedAt,
+    targetMonth: month,
+    focusAreas: ['career'],
+    sign: 'Scorpio',
+    mode: 'personal',
+    profileId: null,
+    sources: [],
+    evidence: { mode: 'curated', gap: false },
+    ...overrides,
+  };
+}
+
+test('stored forecasts: one versioned record per month, the newest six kept', () => {
+  const months = ['June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  let records: ForecastRecord[] = [];
+  months.forEach((name, i) => {
+    records = withForecast(records, storedForecast(`${name} 2026`, `2026-05-0${i + 1}T10:00:00.000Z`));
+  });
+  assert.equal(records.length, MAX_STORED_MONTHS);
+  assert.equal(forecastForMonth(records, 'June 2026'), null, 'the oldest one made room');
+  assert.equal(forecastForMonth(records, 'December 2026')!.result.theme, 'Theme of December 2026');
+  assert.ok(records.every((r) => r.version === FORECAST_RECORD_VERSION && r.month === r.forecast.targetMonth));
+
+  // Generating a month again replaces its record instead of adding one.
+  const again = withForecast(
+    records,
+    storedForecast('July 2026', '2026-05-20T10:00:00.000Z', { sign: 'Leo' })
+  );
+  assert.equal(again.length, MAX_STORED_MONTHS);
+  assert.equal(again[0].month, 'July 2026');
+  assert.equal(forecastForMonth(again, 'July 2026')!.sign, 'Leo');
+
+  // Records marked as "must keep" (months with a review, later) survive and do not use up room.
+  const kept = pruneForecastRecords(records, (r) => r.month === 'July 2026', 2);
+  assert.deepEqual(kept.map((r) => r.month), ['December 2026', 'November 2026', 'July 2026']);
+});
+
+test('stored forecasts are checked on load and anything unusable is dropped', () => {
+  const good = { version: 1, month: 'November 2026', forecast: storedForecast('November 2026', '2026-10-28T10:00:00.000Z') };
+  const revived = reviveForecastRecords(
+    JSON.parse(
+      JSON.stringify([
+        good,
+        { ...good, month: 'December 2026' },
+        { ...good, version: 2, month: 'October 2026', forecast: storedForecast('October 2026', '2026-09-28T10:00:00.000Z') },
+        { ...good, month: 'someday' },
+        {
+          version: 1,
+          month: 'September 2026',
+          forecast: { ...storedForecast('September 2026', '2026-08-28T10:00:00.000Z'), result: { overall_theme: 'old shape', events: [], ics_content: 'BEGIN:VCALENDAR' } },
+        },
+        { version: 1, month: 'August 2026', forecast: storedForecast('August 2026', 'yesterday') },
+        { version: 1, month: 'July 2026', forecast: storedForecast('July 2026', '2026-06-28T10:00:00.000Z', { sign: 'Ophiuchus' as never }) },
+        good,
+        'junk',
+        null,
+      ])
+    )
+  );
+  assert.deepEqual(revived.map((r) => r.month), ['November 2026']);
+  assert.deepEqual(revived[0].forecast, good.forecast);
+  assert.deepEqual(reviveForecastRecords('nope'), []);
+  assert.deepEqual(reviveForecastRecords(null), []);
+
+  const loose = reviveForecastRecords([
+    { ...good, forecast: { ...good.forecast, focusAreas: ['career', 'bogus'], sources: 'x', evidence: 5, profileId: 7 } },
+  ])[0].forecast;
+  assert.deepEqual(loose.focusAreas, ['career']);
+  assert.deepEqual([loose.sources, loose.evidence, loose.profileId], [[], null, null]);
 });
 
 function streamOf(chunks: string[]): ReadableStream<Uint8Array> {
@@ -187,7 +311,7 @@ function streamOf(chunks: string[]): ReadableStream<Uint8Array> {
 const SSE_DOC =
   'event: progress\r\ndata: {"step":1}\r\n\r\n' +
   'event: progress\r\ndata: {"step":2}\r\n\r\n' +
-  'event: result\r\ndata: {"result":{"overall_theme":"漢字 theme ✨","events":[],"ics_content":"BEGIN:VCALENDAR\\r\\nEND:VCALENDAR"},"profileId":"abc"}\r\n\r\n';
+  'event: result\r\ndata: {"result":{"theme":"漢字 theme ✨","events":[],"icsContent":"BEGIN:VCALENDAR\\r\\nEND:VCALENDAR"},"profileId":"abc"}\r\n\r\n';
 
 test('SseParser survives every possible split position in a CRLF stream', async () => {
   for (let cut = 1; cut < SSE_DOC.length; cut++) {
@@ -197,7 +321,7 @@ test('SseParser survives every possible split position in a CRLF stream', async 
       { onProgress: (s) => steps.push(s) }
     );
     assert.deepEqual(steps, [1, 2], `split at ${cut}`);
-    assert.equal(out.result.overall_theme, '漢字 theme ✨');
+    assert.equal(out.result.theme, '漢字 theme ✨');
     assert.equal(out.profileId, 'abc');
   }
 });
@@ -209,7 +333,7 @@ test('SseParser survives one-byte chunks', async () => {
     onProgress: (s) => steps.push(s),
   });
   assert.deepEqual(steps, [1, 2]);
-  assert.equal(out.result.overall_theme, '漢字 theme ✨');
+  assert.equal(out.result.theme, '漢字 theme ✨');
 });
 
 test('readForecastSseStream handles chunked CRLF partial events', async () => {
@@ -217,7 +341,7 @@ test('readForecastSseStream handles chunked CRLF partial events', async () => {
     'event: progress\r\nda',
     'ta: {"step":1}\r\n\r\nevent: pro',
     'gress\r\ndata: {"step":2}\r\n\r\n',
-    'event: result\r\ndata: {"result":{"overall_theme":"t","events":[],"ics_content":"ics"},"profileId":"abc"}\r\n\r\n',
+    'event: result\r\ndata: {"result":{"theme":"t","events":[],"icsContent":"ics"},"profileId":"abc"}\r\n\r\n',
   ];
   const steps: number[] = [];
   const out = await readForecastSseStream(streamOf(chunks), {
@@ -225,7 +349,7 @@ test('readForecastSseStream handles chunked CRLF partial events', async () => {
   });
   assert.deepEqual(steps, [1, 2]);
   assert.equal(out.profileId, 'abc');
-  assert.equal(out.result.overall_theme, 't');
+  assert.equal(out.result.theme, 't');
 });
 
 test('readForecastSseStream rejects error events and incomplete EOF', async () => {
@@ -353,7 +477,7 @@ test('mergeProfileWithDefaults never pairs the default place or chart with saved
   assert.deepEqual(mergeProfileWithDefaults(defaults, null).birthPlace, place);
 });
 
-test('a general profile sends only its sign, month and topics', () => {
+test('a general profile sends only its sign, month and focus areas', () => {
   const general = toGeneralProfile(
     { ...VALID_PROFILE, lifeContext: { work: 'jobSeeking' } },
     'Scorpio'
@@ -367,12 +491,12 @@ test('a general profile sends only its sign, month and topics', () => {
     mode: 'general',
     sunSign: 'Scorpio',
     targetMonth: 'November 2026',
-    priorities: ['careerTransition', 'financialPlanning'],
+    focusAreas: ['career', 'money'],
   });
   assert.equal(profileProblem(general), null);
   // Even with leftover fields, nothing else is sent.
   const leftovers = profileRequestBody({ ...VALID_PROFILE, mode: 'general' });
-  assert.deepEqual(Object.keys(leftovers).sort(), ['mode', 'priorities', 'sunSign', 'targetMonth']);
+  assert.deepEqual(Object.keys(leftovers).sort(), ['focusAreas', 'mode', 'sunSign', 'targetMonth']);
 });
 
 test('a personal profile sends cleaned life context only with a forecast', () => {
@@ -390,7 +514,7 @@ test('a personal profile sends cleaned life context only with a forecast', () =>
       ],
     },
   };
-  const body = profileRequestBody(profile);
+  const body = profileRequestBody(profile) as PersonalProfile;
   assert.deepEqual(body.lifeContext, {
     work: 'jobSeeking',
     goals: 'New job',
@@ -398,6 +522,9 @@ test('a personal profile sends cleaned life context only with a forecast', () =>
   });
   for (const key of ['backendUrl', 'chart', 'birthPlace']) assert.equal(key in body, false);
   assert.equal(body.name, 'Test User');
+  assert.deepEqual(body.focusAreas, ['career', 'money']);
+  assert.equal(body.risingSign, 'Scorpio');
+  assert.equal('risingSign' in profileRequestBody({ ...profile, risingSign: undefined }), false);
   assert.equal('lifeContext' in profileRequestBody(profile, { lifeContext: false }), false);
   assert.equal('lifeContext' in profileRequestBody({ ...profile, lifeContext: { kids: [] } }), false);
   assert.deepEqual(primarySign(profile), { sign: 'Scorpio', kind: 'rising' });

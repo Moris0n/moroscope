@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Moroscope mockup E: Gazette (five styles)</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&family=Fraunces:opsz,wght@9..144,400..800&family=Rye&display=swap" rel="stylesheet" />
+<style>
+  /* ---------- Themes ---------- */
+  body[data-s="aurora"] { --paper:#04121A; --card:rgba(255,255,255,.05); --ink:#EAFBF8; --body:#C5DCDC; --soft:#8FB5B8; --line:rgba(255,255,255,.14); --rule:#9BF0E1;
+    --accent:#9BF0E1; --good:#A8F08E; --care:#FFB86B; --key:#B9A5FF; --btnbg:linear-gradient(90deg,#A8F08E,#9BF0E1,#B9A5FF); --btnfg:#04201F; }
+  body[data-s="memphis"] { --paper:#FFF4DF; --card:#fff; --ink:#111; --body:#2B2B2B; --soft:#5A5A5A; --line:#111; --rule:#111;
+    --accent:#FF5C8A; --good:#00A896; --care:#FF5C39; --key:#3A56E8; --btnbg:#FFD23F; --btnfg:#111; }
+  body[data-s="deco"] { --paper:#0E1014; --card:#15181D; --ink:#F2E9D8; --body:#CFC6B4; --soft:#A2987F; --line:rgba(212,175,106,.32); --rule:#D4AF6A;
+    --accent:#D4AF6A; --good:#7FCFB0; --care:#E88D6B; --key:#9DB4E8; --btnbg:linear-gradient(180deg,#E7C987,#B8924C); --btnfg:#14110A; }
+  body[data-s="brutal"] { --paper:#EFEFEA; --card:#EFEFEA; --ink:#000; --body:#111; --soft:#444; --line:#000; --rule:#000;
+    --accent:#FF2E00; --good:#0A7A3B; --care:#FF2E00; --key:#1B1BFF; --btnbg:#000; --btnfg:#EFEFEA; }
+  body[data-s="western"] { --paper:#EBDCC0; --card:#F3E8D0; --ink:#3B2218; --body:#4E3327; --soft:#7C614E; --line:rgba(59,34,24,.3); --rule:#3B2218;
+    --accent:#B4502A; --good:#2B7F78; --care:#B4502A; --key:#6B3A7D; --btnbg:#B4502A; --btnfg:#FBF1DC; }
+
+  /* ---------- Newspaper layout (shared) ---------- */
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--paper); color:var(--ink); font:16px/1.55 'DM Sans',system-ui,sans-serif; padding-bottom:72px; overflow-x:hidden; }
+  button { font:inherit; cursor:pointer; }
+  .deco { position:absolute; inset:0 0 auto 0; height:620px; overflow:hidden; pointer-events:none; z-index:0; }
+  .mast, main { position:relative; z-index:1; }
+  .mast { max-width:1040px; margin:0 auto; padding:14px 20px 12px; text-align:center; border-bottom:1px solid var(--rule); }
+  .dateline { display:flex; justify-content:space-between; gap:12px; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--soft); }
+  .brand { font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:34px; line-height:1.1; margin-top:8px; }
+  .mast nav { display:none; justify-content:center; gap:28px; margin-top:10px; font-size:13px; letter-spacing:.12em; text-transform:uppercase; }
+  .mast nav a, .tabs a { color:var(--soft); text-decoration:none; } .mast nav a.on, .tabs a.on { color:var(--ink); font-weight:700; }
+  main { max-width:1040px; margin:0 auto; padding:28px 20px; display:grid; grid-template-columns:minmax(0,1fr); gap:36px; }
+  .kicker { font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:600; }
+  h1 { font-family:'Fraunces',Georgia,serif; font-weight:500; font-size:46px; line-height:1.05; margin-top:8px; letter-spacing:-.01em; }
+  .lead { font-family:'Fraunces',Georgia,serif; font-size:19px; line-height:1.5; margin-top:16px; }
+  .lead::first-letter { float:left; font-size:3.1em; line-height:.85; padding:6px 8px 0 0; font-weight:600; color:var(--accent); }
+  .actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px 16px; margin-top:20px; font-size:13px; color:var(--soft); }
+  .btn { background:var(--btnbg); color:var(--btnfg); border:0; border-radius:999px; padding:12px 20px; font-weight:700; font-size:14px; }
+  .week { margin-top:36px; }
+  .week h2 { font-size:12px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--soft); padding-bottom:8px; border-bottom:1px solid var(--rule); }
+  .entry { --c:var(--good); display:grid; grid-template-columns:64px 1fr; gap:14px; padding:18px 0; border-bottom:1px solid var(--line); }
+  .entry.care { --c:var(--care); } .entry.key { --c:var(--key); }
+  .entry.past { opacity:.55; }
+  .day { font-family:'Fraunces',Georgia,serif; font-size:30px; line-height:1; }
+  .day small { display:block; font:500 12px 'DM Sans',sans-serif; color:var(--soft); margin-top:5px; }
+  .type { display:inline-block; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--c); }
+  .entry h3 { font-family:'Fraunces',Georgia,serif; font-weight:500; font-size:21px; line-height:1.25; margin-top:3px; }
+  .entry p { margin-top:6px; color:var(--body); }
+  .meta { margin-top:8px; font-size:13px; color:var(--soft); } .meta a { color:inherit; text-underline-offset:3px; }
+  .todayline { display:flex; align-items:center; gap:10px; margin-top:22px; font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); }
+  .todayline::after { content:''; flex:1; height:1px; background:var(--accent); }
+  aside { display:grid; gap:24px; align-content:start; }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:18px; }
+  .box h4 { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--soft); margin-bottom:12px; }
+  .cal { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; text-align:center; font-family:'Fraunces',Georgia,serif; font-size:15px; }
+  .cal b { font:500 11px 'DM Sans',sans-serif; color:var(--soft); }
+  .cal span { padding:5px 0 8px; position:relative; }
+  .cal span.t { outline:1.5px solid var(--accent); border-radius:8px; }
+  .cal span i { position:absolute; left:50%; bottom:2px; width:5px; height:5px; margin-left:-2.5px; border-radius:50%; background:var(--c); }
+  .cal .good { --c:var(--good); } .cal .care { --c:var(--care); } .cal .key { --c:var(--key); }
+  .src li { list-style:none; display:flex; justify-content:space-between; gap:12px; padding:6px 0; font-size:14px; border-top:1px solid var(--line); }
+  .src li:first-child { border-top:0; } .src em { font-style:normal; color:var(--soft); font-size:13px; white-space:nowrap; }
+  .tabs { position:fixed; z-index:3; inset:auto 0 0 0; display:grid; grid-template-columns:repeat(3,1fr); background:var(--paper); border-top:1px solid var(--rule); text-align:center; font-size:12px; letter-spacing:.12em; text-transform:uppercase; }
+  .tabs a { padding:18px 0; }
+  /* Mockup control, not part of the design */
+  .switch { position:fixed; z-index:5; right:10px; bottom:66px; display:flex; gap:2px; padding:4px; border-radius:999px; background:#000; font-size:12px; }
+  .switch { max-width:calc(100vw - 20px); overflow-x:auto; white-space:nowrap; }
+  .switch button { border:0; background:none; color:#bbb; padding:6px 9px; border-radius:999px; } .switch button.on { background:#fff; color:#000; font-weight:700; }
+  @media (min-width:860px) {
+    body { padding-bottom:0; } .tabs { display:none; } .mast nav { display:flex; } .brand { font-size:52px; } .switch { bottom:14px; }
+    main { grid-template-columns:minmax(0,1fr) 290px; gap:60px; padding:44px 20px 80px; }
+    h1 { font-size:68px; } .lead { column-count:2; column-gap:28px; } aside { position:sticky; top:24px; }
+  }
+
+  /* ---------- Aurora: night paper under moving light ---------- */
+  [data-s="aurora"] .deco u { position:absolute; border-radius:50%; filter:blur(70px); opacity:.55; animation:drift 16s ease-in-out infinite alternate; }
+  @keyframes drift { to { transform:translate(60px,30px) scale(1.25) rotate(8deg); } }
+  [data-s="aurora"] h1, [data-s="aurora"] .brand { background:linear-gradient(90deg,#A8F08E,#9BF0E1 45%,#B9A5FF); -webkit-background-clip:text; background-clip:text; color:transparent; width:fit-content; }
+  [data-s="aurora"] .brand { margin-inline:auto; }
+  [data-s="aurora"] .mast, [data-s="aurora"] .week h2 { border-image:linear-gradient(90deg,#A8F08E,#9BF0E1,#B9A5FF,transparent) 1; }
+  [data-s="aurora"] .box { border-radius:18px; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
+  [data-s="aurora"] .type { text-shadow:0 0 14px var(--c); }
+  [data-s="aurora"] .btn { box-shadow:0 0 28px rgba(155,240,225,.4); }
+
+  /* ---------- Memphis: loud shapes, thick outlines, hard shadows ---------- */
+  [data-s="memphis"] { background-image:radial-gradient(#11111122 1.2px,transparent 1.3px); background-size:18px 18px; }
+  [data-s="memphis"] .mast { border-bottom:4px solid #111; background:var(--paper); max-width:none; }
+  [data-s="memphis"] .brand, [data-s="memphis"] h1 { font-weight:800; letter-spacing:-.02em; }
+  [data-s="memphis"] h1 span { background:linear-gradient(transparent 62%,#FFD23F 62% 92%,transparent 92%); }
+  [data-s="memphis"] .lead::first-letter { color:#fff; background:#3A56E8; padding:8px 10px 4px; margin:4px 10px 0 0; border:2.5px solid #111; box-shadow:4px 4px 0 #111; line-height:.9; }
+  [data-s="memphis"] .btn { border:2.5px solid #111; border-radius:0; box-shadow:5px 5px 0 #111; }
+  [data-s="memphis"] .week h2 { display:inline-block; border:0; background:#111; color:#fff; padding:6px 12px; transform:rotate(-1.5deg); }
+  [data-s="memphis"] .entry { background:#fff; border:2.5px solid #111; box-shadow:7px 7px 0 var(--c); padding:16px; margin-top:20px; }
+  [data-s="memphis"] .type { background:var(--c); color:#fff; padding:2px 8px; border:2px solid #111; }
+  [data-s="memphis"] .day { font-weight:800; }
+  [data-s="memphis"] .todayline { color:#111; } [data-s="memphis"] .todayline::after { height:10px; background:repeating-linear-gradient(135deg,#FF5C8A 0 8px,transparent 8px 16px); }
+  [data-s="memphis"] .box { border:2.5px solid #111; border-radius:0; box-shadow:7px 7px 0 #FFD23F; }
+  [data-s="memphis"] .box + .box { box-shadow:7px 7px 0 #2EC4B6; }
+  [data-s="memphis"] .cal span.t { outline:0; background:#FFD23F; border:2px solid #111; border-radius:50%; }
+  [data-s="memphis"] .tabs { border-top:4px solid #111; }
+  [data-s="memphis"] .deco svg { position:absolute; }
+  @media (max-width:859px) { [data-s="memphis"] .deco svg:nth-child(n+3) { display:none; } [data-s="memphis"] .deco svg:nth-child(2) { top:196px !important; right:6px !important; transform:scale(.8); } }
+
+  /* ---------- Art Deco: black, gold, symmetry ---------- */
+  [data-s="deco"] .mast { border-bottom:4px double var(--rule); }
+  [data-s="deco"] .brand, [data-s="deco"] h1 { text-transform:uppercase; letter-spacing:.1em; font-weight:400; background:linear-gradient(180deg,#F3DFA9,#B8924C); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  [data-s="deco"] article > .kicker, [data-s="deco"] h1 { text-align:center; }
+  [data-s="deco"] h1 { font-size:38px; margin-top:12px; }
+  [data-s="deco"] h1::after { content:'\25C6'; display:block; font-size:12px; letter-spacing:0; margin-top:14px; color:var(--accent); -webkit-text-fill-color:var(--accent);
+    background:linear-gradient(90deg,transparent,var(--rule) 20% 44%,transparent 44% 56%,var(--rule) 56% 80%,transparent) center/100% 1px no-repeat; }
+  [data-s="deco"] .actions { justify-content:center; }
+  [data-s="deco"] .btn { border-radius:0; letter-spacing:.14em; text-transform:uppercase; font-size:12px; clip-path:polygon(10px 0,calc(100% - 10px) 0,100% 50%,calc(100% - 10px) 100%,10px 100%,0 50%); padding:13px 28px; }
+  [data-s="deco"] .week h2 { display:flex; align-items:center; gap:14px; border:0; color:var(--accent); letter-spacing:.24em; padding:0; }
+  [data-s="deco"] .week h2::before, [data-s="deco"] .week h2::after { content:''; flex:1; height:5px; border-block:1px solid var(--rule); }
+  [data-s="deco"] .day { color:var(--accent); }
+  [data-s="deco"] .entry h3 { letter-spacing:.01em; }
+  [data-s="deco"] .box { border-radius:0; border:1px solid var(--rule); outline:1px solid var(--line); outline-offset:-6px; padding:24px; }
+  [data-s="deco"] .box h4 { text-align:center; color:var(--accent); letter-spacing:.24em; }
+  [data-s="deco"] .cal span.t { border-radius:0; }
+  [data-s="deco"] .cal span i { border-radius:0; transform:rotate(45deg); }
+  [data-s="deco"] .tabs { border-top:4px double var(--rule); }
+  [data-s="deco"] .deco svg { position:absolute; left:50%; top:60px; width:1100px; margin-left:-550px; color:var(--accent); opacity:.2; }
+  @media (min-width:860px) { [data-s="deco"] h1 { font-size:60px; } }
+
+  /* ---------- Brutalism: raw grid, black rules, one loud colour ---------- */
+  [data-s="brutal"] .mono, [data-s="brutal"] .dateline, [data-s="brutal"] .mast nav, [data-s="brutal"] .kicker, [data-s="brutal"] .week h2, [data-s="brutal"] .type,
+  [data-s="brutal"] .meta, [data-s="brutal"] .day small, [data-s="brutal"] .box h4, [data-s="brutal"] .src, [data-s="brutal"] .tabs, [data-s="brutal"] .actions, [data-s="brutal"] .todayline { font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace; letter-spacing:0; }
+  [data-s="brutal"] .mast { max-width:none; text-align:left; border-bottom:4px solid #000; padding-bottom:0; }
+  [data-s="brutal"] .brand { font-weight:800; font-size:50px; line-height:.85; letter-spacing:-.04em; text-transform:uppercase; margin:10px 0 8px; }
+  [data-s="brutal"] .mast nav { justify-content:flex-start; gap:0; margin:0 -20px; border-top:4px solid #000; }
+  [data-s="brutal"] .mast nav a { padding:10px 20px; border-right:4px solid #000; color:#000; } [data-s="brutal"] .mast nav a.on { background:#000; color:var(--paper); }
+  [data-s="brutal"] .kicker { color:#000; }
+  [data-s="brutal"] h1 { font-weight:800; font-size:52px; margin-top:18px; line-height:.88; letter-spacing:-.04em; text-transform:uppercase; }
+  [data-s="brutal"] h1 span { background:#E6FF00; box-shadow:0 0 0 4px #E6FF00; }
+  [data-s="brutal"] .lead { font-size:18px; border-left:12px solid #000; padding-left:14px; margin-top:22px; }
+  [data-s="brutal"] .lead::first-letter { color:#000; font-weight:800; }
+  [data-s="brutal"] .btn { border-radius:0; text-transform:uppercase; padding:14px 18px; font-family:ui-monospace,Menlo,monospace; } [data-s="brutal"] .btn::after { content:' ->'; }
+  [data-s="brutal"] .week { margin-top:40px; border:4px solid #000; }
+  [data-s="brutal"] .week h2 { background:#000; color:var(--paper); padding:8px 12px; font-size:13px; }
+  [data-s="brutal"] .entry { padding:16px 12px; border-bottom:4px solid #000; grid-template-columns:72px 1fr; } [data-s="brutal"] .entry:last-child { border-bottom:0; }
+  [data-s="brutal"] .entry.past { opacity:1; color:#777; } [data-s="brutal"] .entry.past p { color:#777; }
+  [data-s="brutal"] .day { font-weight:800; font-size:34px; letter-spacing:-.04em; }
+  [data-s="brutal"] .type { background:var(--c); color:#fff; padding:1px 6px; }
+  [data-s="brutal"] .entry h3 { font-weight:700; font-size:24px; letter-spacing:-.01em; }
+  [data-s="brutal"] .todayline { background:#E6FF00; color:#000; border:4px solid #000; padding:8px 12px; margin-top:40px; margin-bottom:-40px; border-bottom:0; } [data-s="brutal"] .todayline::after { display:none; }
+  [data-s="brutal"] .box { border:4px solid #000; border-radius:0; padding:0; } [data-s="brutal"] .box h4 { background:#000; color:var(--paper); padding:8px 12px; margin:0; }
+  [data-s="brutal"] .cal { padding:10px; font-weight:700; } [data-s="brutal"] .cal span.t { outline:0; background:#E6FF00; border-radius:0; box-shadow:inset 0 0 0 3px #000; }
+  [data-s="brutal"] .cal span i { border-radius:0; width:7px; height:7px; }
+  [data-s="brutal"] .src { padding:4px 12px; } [data-s="brutal"] .src li { border-top:2px solid #000; }
+  [data-s="brutal"] .tabs { border-top:4px solid #000; } [data-s="brutal"] .tabs a { color:#000; border-right:4px solid #000; } [data-s="brutal"] .tabs a.on { background:#000; color:var(--paper); }
+  [data-s="brutal"] .deco b { position:absolute; right:-30px; top:40px; font:800 560px/1 'Fraunces',serif; letter-spacing:-.06em; color:transparent; -webkit-text-stroke:3px #000; opacity:.09; }
+  @media (max-width:859px) { [data-s="brutal"] .deco b { display:none; } }
+  @media (min-width:860px) { [data-s="brutal"] .brand { font-size:120px; } [data-s="brutal"] h1 { font-size:104px; } [data-s="brutal"] .mast { padding-inline:20px; } }
+
+  /* ---------- Mystic Western: desert parchment, tarot sun, poster type ---------- */
+  [data-s="western"] { background:radial-gradient(120% 60% at 50% 0,#F5E9CF,#EBDCC0 55%,#DDC79F) fixed; }
+  [data-s="western"] .mast { border-bottom:0; background:linear-gradient(var(--rule),var(--rule)) bottom/100% 1px no-repeat, linear-gradient(var(--rule),var(--rule)) 0 calc(100% - 5px)/100% 3px no-repeat; padding-bottom:18px; }
+  [data-s="western"] .brand, [data-s="western"] h1 { font-family:'Rye','Fraunces',serif; font-weight:400; letter-spacing:.02em; }
+  [data-s="western"] .brand { color:var(--ink); } [data-s="western"] .brand::before, [data-s="western"] .brand::after { content:'\2726'; font-size:.4em; vertical-align:middle; margin:0 .6em; color:var(--accent); }
+  [data-s="western"] article > .kicker, [data-s="western"] h1 { text-align:center; }
+  [data-s="western"] h1 { color:var(--accent); font-size:40px; line-height:1.15; text-shadow:2px 2px 0 var(--paper), 4px 4px 0 rgba(59,34,24,.35); margin-top:12px; }
+  [data-s="western"] .lead::first-letter { font-family:'Rye',serif; font-weight:400; color:var(--good); padding-right:10px; }
+  [data-s="western"] .actions { justify-content:center; }
+  [data-s="western"] .btn { border-radius:4px; border:2px solid var(--ink); box-shadow:inset 0 0 0 2px var(--btnbg), inset 0 0 0 3px rgba(251,241,220,.7); letter-spacing:.1em; text-transform:uppercase; font-size:12px; padding:14px 22px; }
+  [data-s="western"] #weeks::before { content:''; display:block; height:70px; margin-top:30px; border-bottom:2px solid var(--rule); background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 70'%3E%3Cpath d='M262 70a38 38 0 0 1 76 0Z' fill='%23D09A2C'/%3E%3Cpath d='M0 70V56H60L72 42H150L164 58H420L434 46H500L512 34H560L572 50H600V70Z' fill='%23B4502A' opacity='.45'/%3E%3Cg fill='none' stroke='%232B7F78' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M110 70V14' stroke-width='11'/%3E%3Cpath d='M110 46H95V28M110 38H125V18' stroke-width='7'/%3E%3Cpath d='M470 70V28' stroke-width='9'/%3E%3Cpath d='M470 54H458V40M470 48H482V32' stroke-width='6'/%3E%3Cpath d='M200 70V46' stroke-width='6'/%3E%3Cpath d='M200 62H192V54' stroke-width='4'/%3E%3C/g%3E%3C/svg%3E") center bottom/contain no-repeat; }
+  [data-s="western"] .week h2 { display:flex; align-items:center; gap:12px; border:0; padding:0; color:var(--ink); letter-spacing:.22em; }
+  [data-s="western"] .week h2::before, [data-s="western"] .week h2::after { content:''; flex:1; height:6px; border-top:1px solid var(--rule); border-bottom:1px dashed var(--rule); }
+  [data-s="western"] .entry { border-bottom:1px dashed var(--line); }
+  [data-s="western"] .day { font-family:'Rye',serif; font-size:26px; color:var(--ink); }
+  [data-s="western"] .type::before { content:'\2726  '; }
+  [data-s="western"] .todayline::before { content:'\263D'; font-size:16px; }
+  [data-s="western"] .box { border-radius:10px; border:2px solid var(--ink); outline:1px dashed var(--line); outline-offset:-7px; padding:24px 22px; background:var(--card); }
+  [data-s="western"] .box h4 { text-align:center; color:var(--accent); letter-spacing:.2em; }
+  [data-s="western"] .cal span.t { outline-color:var(--accent); border-radius:50%; }
+  [data-s="western"] .tabs { border-top:3px double var(--rule); }
+  [data-s="western"] .deco svg { position:absolute; left:50%; top:70px; width:1100px; margin-left:-550px; color:var(--accent); opacity:.24; }
+  @media (min-width:860px) { [data-s="western"] h1 { font-size:66px; } }
+</style>
+</head>
+<body>
+<div class="deco" id="deco"></div>
+<div class="switch" id="switch" title="Mockup only: switch the style">
+  <button data-s="aurora">Aurora</button><button data-s="memphis">Memphis</button><button data-s="deco">Art Deco</button><button data-s="brutal">Brutalism</button><button data-s="western">Mystic Western</button>
+</div>
+<header class="mast">
+  <div class="dateline"><span id="date"></span><span id="who"></span></div>
+  <div class="brand">Moroscope</div>
+  <nav><a class="on" href="#">Month</a><a href="#">Sources</a><a href="#">You</a></nav>
+</header>
+<main>
+  <article>
+    <p class="kicker">Your month, from the astrologers you trust</p>
+    <h1><span id="title"></span></h1>
+    <p class="lead" id="theme"></p>
+    <div class="actions"><button class="btn">Add the month to my calendar</button><span id="updated"></span></div>
+    <div id="weeks"></div>
+  </article>
+  <aside>
+    <div class="box"><h4 id="minititle"></h4><div class="cal" id="cal"></div></div>
+    <div class="box"><h4>Read for this forecast</h4><ul class="src" id="src"></ul></div>
+  </aside>
+</main>
+<nav class="tabs"><a class="on" href="#">Month</a><a href="#">Sources</a><a href="#">You</a></nav>
+<script src="data.js"></script>
+<script>
+  const M = window.MOCK, $ = (id) => document.getElementById(id);
+  $('date').textContent = `${M.wd(M.today)} ${M.today} ${M.month} ${M.year}`;
+  $('who').textContent = `${M.glyph} ${M.sign} edition`;
+  $('title').textContent = `${M.month} ${M.year}`;
+  $('theme').textContent = M.theme;
+  $('updated').textContent = `Updated today · ${M.usedCount} of ${M.sources.length} sources had a forecast`;
+  $('minititle').textContent = `${M.month} at a glance`;
+  // Weeks run Monday to Sunday.
+  const weekStart = (d) => d - ((M.dow(d) + 6) % 7);
+  let html = '', week = null, marked = false;
+  for (const e of M.events) {
+    const ws = weekStart(e.from);
+    if (!marked && M.end(e) >= M.today) {
+      marked = true;
+      html += `<div class="todayline">Today · ${M.wd(M.today)} ${M.today}</div>`;
+    }
+    if (ws !== week) {
+      if (week !== null) html += '</section>';
+      week = ws;
+      html += `<section class="week"><h2>${Math.max(ws, 1)}\u2013${Math.min(ws + 6, M.days)} ${M.month}</h2>`;
+    }
+    html += `<div class="entry ${e.type}${M.end(e) < M.today ? ' past' : ''}">
+      <div class="day">${e.from}${e.to ? '\u2013' + e.to : ''}<small>${e.to ? M.wd(e.from) + ' to ' + M.wd(e.to) : M.wd(e.from)}</small></div>
+      <div><div class="type">${M.typeLabel[e.type]}</div><h3>${e.title}</h3><p>${e.summary}</p>
+      <div class="meta">${e.topics.join(', ')} · according to ${e.sources.map((s) => `<a href="#">${s}</a>`).join(' and ')}</div></div></div>`;
+  }
+  $('weeks').innerHTML = html + '</section>';
+  let cal = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => `<b>${d}</b>`).join('') + '<span></span>'.repeat((M.dow(1) + 6) % 7);
+  for (let d = 1; d <= M.days; d++) {
+    const ev = M.on(d)[0];
+    cal += `<span class="${d === M.today ? 't ' : ''}${ev ? ev.type : ''}">${d}${ev ? '<i></i>' : ''}</span>`;
+  }
+  $('cal').innerHTML = cal;
+  $('src').innerHTML = M.sources.map((s) => `<li>${s.name}<em>${s.status}</em></li>`).join('');
+
+  // Background decoration per style.
+  let rays = '';
+  for (let i = 0; i <= 36; i++) rays += `<line x1="550" y1="560" x2="${(550 + 700 * Math.cos(Math.PI * i / 36)).toFixed(0)}" y2="${(560 - 700 * Math.sin(Math.PI * i / 36)).toFixed(0)}" stroke="currentColor" stroke-width="${i % 3 ? 1 : 2.5}"/>`;
+  const DECO = {
+    aurora: `<u style="left:-8%;top:-140px;width:520px;height:340px;background:#19E3B1"></u>
+      <u style="left:32%;top:-180px;width:560px;height:360px;background:#4D6BFF;animation-delay:-5s"></u>
+      <u style="right:-10%;top:-120px;width:480px;height:320px;background:#B14DFF;animation-delay:-9s"></u>`,
+    memphis: `<svg style="left:-30px;top:150px" width="120" height="120"><circle cx="60" cy="60" r="46" fill="#FF5C8A" stroke="#111" stroke-width="3"/></svg>
+      <svg style="right:14px;top:128px" width="96" height="96"><path d="M48 8 90 84H6Z" fill="#2EC4B6" stroke="#111" stroke-width="3" stroke-linejoin="round"/></svg>
+      <svg style="right:22%;top:250px" width="150" height="40"><path d="M4 28q14-34 28 0t28 0 28 0 28 0 28 0" fill="none" stroke="#3A56E8" stroke-width="6" stroke-linecap="round"/></svg>
+      <svg style="left:38%;top:110px" width="70" height="40"><path d="M3 3a32 32 0 0 0 64 0Z" fill="#FFD23F" stroke="#111" stroke-width="3"/></svg>
+      <svg style="right:-20px;top:420px" width="90" height="90"><rect x="14" y="14" width="56" height="56" fill="#FFD23F" stroke="#111" stroke-width="3" transform="rotate(18 42 42)"/></svg>`,
+    deco: `<svg viewBox="0 0 1100 560"><g>${rays}</g>${[120, 200, 290].map((r) => `<path d="M${550 - r} 560a${r} ${r} 0 0 1 ${2 * r} 0" fill="none" stroke="currentColor" stroke-width="2"/>`).join('')}</svg>`,
+  };
+  DECO.brutal = `<b>${String(11)}</b>`;
+  let sun = '', stars = '';
+  for (let i = 0; i < 24; i++) sun += `<line x1="550" y1="${i % 2 ? 150 : 125}" x2="550" y2="${i % 2 ? 120 : 70}" stroke="currentColor" stroke-width="${i % 2 ? 2 : 4}" stroke-linecap="round" transform="rotate(${i * 15} 550 300)"/>`;
+  for (const [x, y, r] of [[150, 90, 9], [300, 200, 6], [820, 70, 8], [960, 230, 6], [90, 330, 5], [1010, 380, 7], [720, 30, 5], [400, 40, 5]])
+    stars += `<path d="M${x} ${y - r}Q${x} ${y} ${x + r} ${y}Q${x} ${y} ${x} ${y + r}Q${x} ${y} ${x - r} ${y}Q${x} ${y} ${x} ${y - r}Z" fill="currentColor"/>`;
+  DECO.western = `<svg viewBox="0 0 1100 560"><circle cx="550" cy="300" r="118" fill="none" stroke="currentColor" stroke-width="4"/>
+    <circle cx="550" cy="300" r="104" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 7"/>${sun}${stars}
+    <path d="M905 120a44 44 0 1 0 40 62a34 34 0 1 1-40-62Z" fill="currentColor"/></svg>`;
+  const setStyle = (s) => {
+    if (!DECO[s]) s = 'aurora';
+    document.body.dataset.s = s;
+    $('deco').innerHTML = DECO[s];
+    document.querySelectorAll('#switch button').forEach((b) => b.classList.toggle('on', b.dataset.s === s));
+  };
+  $('switch').addEventListener('click', (ev) => ev.target.dataset.s && setStyle(ev.target.dataset.s));
+  setStyle(new URLSearchParams(location.search).get('s') || 'aurora');
+</script>
+</body>
+</html>

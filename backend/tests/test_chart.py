@@ -5,8 +5,8 @@ import pytest
 
 from app.chart import ChartCalculator, ascendant_longitude, sign_of
 from app.config import PipelineError
+from app.models import ChartRequest, validate_chart_request
 from app.places import normalize, search_places
-from app.validation import ChartRequest, validate_chart_request
 
 from .helpers import api_client, make_deps
 

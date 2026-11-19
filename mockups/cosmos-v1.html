@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Moroscope mockup F: Cosmos (six styles)</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&family=Fraunces:opsz,wght@9..144,400..800&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Shrikhand&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Elsie+Swash+Caps:wght@400;900&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Righteous&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&display=swap" rel="stylesheet" />
+<style>
+  /* ---------- Themes ---------- */
+  body { --hfont:'Fraunces',Georgia,serif; --tfont:'Fraunces',Georgia,serif; }
+  body[data-s="atlas"] { --paper:#0C1A2C; --card:#12243A; --cell:rgba(255,255,255,.04); --ink:#EFE6D0; --body:#CFC7B2; --soft:#93A0B0; --line:rgba(201,164,92,.38); --rule:#C9A45C;
+    --accent:#C9A45C; --onaccent:#0C1A2C; --accent2:#8FD0B5; --good:#8FD0B5; --care:#E59A76; --key:#B3C0F5; --btnbg:#C9A45C; --btnfg:#0C1A2C; --wheel:#C9A45C;
+    --hfont:'IM Fell English',Georgia,serif; --tfont:'IM Fell English',Georgia,serif; }
+  body[data-s="psych"] { --paper:#2B0B4F; --card:#3A1168; --cell:rgba(255,255,255,.08); --ink:#FFF3D6; --body:#F1DDF5; --soft:#D3A9F0; --line:#FF7A1A; --rule:#FF3DA5;
+    --accent:#FFE14D; --onaccent:#2B0B4F; --accent2:#FF3DA5; --good:#5CF2C0; --care:#FF8A2B; --key:#FF6BD0; --btnbg:#FF3DA5; --btnfg:#FFF3D6; --wheel:#FFE14D; --hfont:'Shrikhand','Fraunces',serif; }
+  body[data-s="nouveau"] { --paper:#F1E9D6; --card:#F9F3E3; --cell:rgba(122,143,106,.12); --ink:#3A3226; --body:#51473A; --soft:#857A66; --line:rgba(176,141,60,.6); --rule:#B08D3C;
+    --accent:#B08D3C; --onaccent:#fff; --accent2:#7A8F6A; --good:#5F7F56; --care:#B5605A; --key:#8A6BA8; --btnbg:#5F7F56; --btnfg:#F9F3E3; --wheel:#B08D3C; --hfont:'Elsie Swash Caps','Fraunces',serif; }
+  body[data-s="tarot"] { --paper:#190F26; --card:rgba(255,255,255,.04); --cell:rgba(255,255,255,.05); --ink:#F1E6CF; --body:#D5C8B4; --soft:#A190B5; --line:rgba(214,178,94,.4); --rule:#D6B25E;
+    --accent:#D6B25E; --onaccent:#190F26; --accent2:#C3A0F5; --good:#7FD6BF; --care:#F08A6E; --key:#C3A0F5; --btnbg:#D6B25E; --btnfg:#190F26; --wheel:#D6B25E;
+    --hfont:'Cinzel','Fraunces',serif; --tfont:'Cinzel','Fraunces',serif; }
+  body[data-s="riso"] { --paper:#F3E9D8; --card:#FBF4E6; --cell:rgba(91,46,26,.08); --ink:#3A1D0E; --body:#4F3020; --soft:#8A6A55; --line:#3A1D0E; --rule:#3A1D0E;
+    --accent:#E4572E; --onaccent:#FBF4E6; --accent2:#1F7A8C; --good:#1F7A8C; --care:#E4572E; --key:#D99A1A; --btnbg:#E4572E; --btnfg:#FBF4E6; --wheel:#1F7A8C; --hfont:'Righteous','Fraunces',sans-serif; }
+  body[data-s="grimoire"] { --paper:#0F0D0B; --card:#161310; --cell:rgba(230,221,200,.05); --ink:#E6DDC8; --body:#BDB39D; --soft:#8A816F; --line:#3A332A; --rule:#6B6152;
+    --accent:#C23B30; --onaccent:#F3EAD6; --accent2:#C8A96A; --good:#9DB38A; --care:#D0584B; --key:#C8A96A; --btnbg:#8E2018; --btnfg:#F3EAD6; --wheel:#8A816F;
+    --hfont:'UnifrakturCook','Fraunces',serif; --tfont:'IM Fell English',Georgia,serif; }
+
+  /* ---------- Shared layout ---------- */
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--paper); color:var(--ink); font:16px/1.55 'DM Sans',system-ui,sans-serif; padding-bottom:72px; overflow-x:hidden; position:relative; min-height:100vh; }
+  button { font:inherit; color:inherit; cursor:pointer; }
+  svg.ic { display:block; }
+  .deco { position:absolute; inset:0 0 auto 0; height:900px; overflow:hidden; pointer-events:none; z-index:0; }
+  .mast, .hero, main { position:relative; z-index:1; max-width:1080px; margin:0 auto; }
+  .mast { padding:14px 20px 12px; text-align:center; border-bottom:1px solid var(--rule); }
+  .dateline { display:flex; justify-content:space-between; gap:12px; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--soft); }
+  .brand { font-family:var(--hfont); font-weight:600; font-size:32px; line-height:1.15; margin-top:8px; }
+  .mast nav { display:none; justify-content:center; gap:28px; margin-top:10px; font-size:13px; letter-spacing:.12em; text-transform:uppercase; }
+  .mast nav a, .tabs a { color:var(--soft); text-decoration:none; } .mast nav a.on, .tabs a.on { color:var(--ink); font-weight:700; }
+  .hero { padding:22px 20px 0; display:grid; gap:10px; justify-items:center; text-align:center; }
+  .wheel { width:240px; height:240px; color:var(--wheel); overflow:visible; }
+  .wheel text { fill:currentColor; stroke:none; font-size:19px; } .wheel text.me { fill:var(--onaccent); }
+  .wheel .hl { fill:var(--accent); stroke:none; }
+  .wheel g { transform-origin:200px 200px; }
+  .wheel .spin { animation:spin 120s linear infinite; } .wheel .pulse { animation:pulse 8s ease-in-out infinite; } .wheel .spiral { display:none; animation:spin 9s linear infinite reverse; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes pulse { 0%,100% { transform:scale(.9); opacity:.45; } 50% { transform:scale(1.08); opacity:1; } }
+  @media (prefers-reduced-motion:reduce) { .wheel g, .deco * { animation:none !important; } }
+  .kicker { font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:600; }
+  h1 { font-family:var(--hfont); font-weight:500; font-size:46px; line-height:1.05; margin-top:8px; }
+  .lead { font-family:'Fraunces',Georgia,serif; font-size:18px; line-height:1.5; margin-top:14px; max-width:34em; }
+  .actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:12px 16px; margin-top:18px; font-size:13px; color:var(--soft); }
+  .btn { background:var(--btnbg); color:var(--btnfg); border:0; border-radius:999px; padding:12px 20px; font-weight:700; font-size:14px; }
+  main { padding:4px 20px 40px; }
+  .sec { margin-top:40px; }
+  .sech { display:flex; align-items:center; gap:14px; font-size:12px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:var(--soft); }
+  .sech::before, .sech::after { content:''; flex:1; height:1px; background:var(--rule); }
+  .calrow { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; margin-top:18px; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; }
+  .grid { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
+  .grid b { text-align:center; font-size:10px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--soft); padding-bottom:4px; }
+  .cell { position:relative; aspect-ratio:1/1.25; background:var(--cell); border:1px solid transparent; border-radius:10px; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:3px 2px 5px; min-width:0; }
+  .cell .n { font-family:var(--tfont); font-size:17px; line-height:24px; width:24px; height:24px; border-radius:50%; text-align:center; }
+  .cell .moon { position:absolute; right:3px; top:3px; width:9px; height:9px; color:var(--soft); }
+  .cell .marks { display:flex; gap:1px; height:14px; } .marks svg { width:13px; height:13px; }
+  .good { --c:var(--good); } .care { --c:var(--care); } .key { --c:var(--key); } .ic.good, .ic.care, .ic.key { color:var(--c); }
+  .cell.past { opacity:.5; }
+  .cell.today .n { background:var(--accent); color:var(--onaccent); font-weight:700; }
+  .cell.sel { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 16%,transparent); opacity:1; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:12px; font-size:12px; color:var(--soft); } .legend span { display:flex; align-items:center; gap:6px; } .legend svg { width:14px; height:14px; }
+  .dayp { padding:18px; }
+  .dayp .phase { display:flex; align-items:center; gap:8px; font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--soft); } .phase svg { width:16px; height:16px; color:var(--accent); }
+  .dayp h3 { font-family:var(--tfont); font-weight:500; font-size:26px; line-height:1.2; margin-top:6px; }
+  .dev { display:grid; grid-template-columns:30px 1fr; gap:12px; margin-top:16px; padding-top:14px; border-top:1px solid var(--line); } .dev svg { width:28px; height:28px; }
+  .type { font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--c); }
+  .dev h4 { font-family:var(--tfont); font-weight:500; font-size:19px; line-height:1.25; margin-top:2px; } .dev p { font-size:14px; color:var(--body); margin-top:4px; }
+  .none { margin-top:12px; font-size:14px; color:var(--soft); }
+  .next { margin-top:12px; padding:10px 12px; border:1px dashed var(--line); border-radius:10px; font-size:14px; width:100%; text-align:left; background:none; }
+  .cards { display:flex; gap:14px; overflow-x:auto; scroll-snap-type:x mandatory; margin:18px -20px 0; padding:6px 20px 18px; scrollbar-width:none; }
+  .ecard { flex:0 0 78%; scroll-snap-align:center; display:flex; flex-direction:column; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; }
+  .ecard .top { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+  .num { font-family:var(--hfont); font-size:16px; letter-spacing:.08em; color:var(--soft); } .when { font-size:13px; color:var(--soft); }
+  .sym { color:var(--c); margin:12px 0 8px; } .sym svg { width:44px; height:44px; }
+  .ecard h3 { font-family:var(--tfont); font-weight:500; font-size:22px; line-height:1.25; margin-top:3px; }
+  .ecard p { font-size:14.5px; color:var(--body); margin-top:6px; flex:1; }
+  .meta { font-size:12px; color:var(--soft); margin-top:14px; padding-top:10px; border-top:1px solid var(--line); }
+  .ecard.past { opacity:.55; } .ecard.now .when::after { content:' \00B7  now'; color:var(--accent); font-weight:700; }
+  .src { list-style:none; display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; justify-content:center; }
+  .src li { font-size:13px; border:1px solid var(--line); border-radius:999px; padding:5px 12px; } .src em { font-style:normal; color:var(--soft); margin-left:6px; }
+  .tabs { position:fixed; z-index:3; inset:auto 0 0 0; display:grid; grid-template-columns:repeat(3,1fr); background:var(--paper); border-top:1px solid var(--rule); text-align:center; font-size:12px; letter-spacing:.12em; text-transform:uppercase; }
+  .tabs a { padding:18px 0; }
+  /* Mockup control, not part of the design */
+  .switch { position:fixed; z-index:5; right:10px; bottom:66px; display:flex; gap:2px; padding:4px; border-radius:999px; background:#000; font-size:12px; max-width:calc(100vw - 20px); overflow-x:auto; white-space:nowrap; scrollbar-width:none; }
+  .switch button { border:0; background:none; color:#bbb; padding:6px 9px; border-radius:999px; } .switch button.on { background:#fff; color:#000; font-weight:700; }
+  @media (max-width:899px) { .cell .moon { display:none; } }
+  @media (min-width:900px) {
+    body { padding-bottom:0; } .tabs { display:none; } .mast nav { display:flex; } .brand { font-size:46px; } .switch { bottom:14px; }
+    .hero { grid-template-columns:minmax(0,1fr) 380px; gap:48px; align-items:center; justify-items:start; text-align:left; padding-top:36px; }
+    .hero .wheel { order:2; width:380px; height:380px; } h1 { font-size:72px; } .actions { justify-content:flex-start; }
+    .calrow { grid-template-columns:minmax(0,1fr) 350px; } .panel { padding:18px; }
+    .cell { aspect-ratio:auto; height:82px; align-items:flex-start; padding:7px 8px; } .cell .moon { width:13px; height:13px; right:8px; top:9px; } .cell .marks { gap:3px; height:18px; } .marks svg { width:17px; height:17px; }
+    .cards { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; overflow:visible; margin:20px 0 0; padding:0; }
+  }
+
+  /* ---------- 1. Star atlas: engraved chart, ink blue and gold ---------- */
+  [data-s="atlas"] { background:linear-gradient(rgba(201,164,92,.07) 1px,transparent 1px) 0 0/100% 72px, linear-gradient(90deg,rgba(201,164,92,.07) 1px,transparent 1px) 50% 0/72px 100%, radial-gradient(ellipse 90% 700px at 50% 0,#1A3558,#0C1A2C) #0C1A2C; }
+  [data-s="atlas"] .mast { border-bottom:3px double var(--rule); }
+  [data-s="atlas"] .brand { text-transform:uppercase; letter-spacing:.22em; font-weight:400; color:var(--accent); }
+  [data-s="atlas"] .kicker { font-family:var(--hfont); font-style:italic; text-transform:none; letter-spacing:.02em; font-size:18px; font-weight:400; }
+  [data-s="atlas"] h1 { font-weight:400; } [data-s="atlas"] h1 em { color:var(--accent); }
+  [data-s="atlas"] .lead { font-family:var(--hfont); font-size:20px; }
+  [data-s="atlas"] .btn { border-radius:2px; letter-spacing:.14em; text-transform:uppercase; font-size:12px; padding:13px 22px; }
+  [data-s="atlas"] .panel, [data-s="atlas"] .ecard { border-radius:2px; outline:1px solid var(--line); outline-offset:-6px; }
+  [data-s="atlas"] .ecard { padding:24px; } [data-s="atlas"] .cell { border-radius:2px; }
+  [data-s="atlas"] .deco svg { position:absolute; left:50%; top:0; width:1300px; margin-left:-650px; color:var(--accent); opacity:.55; }
+
+  /* ---------- 2. Psychedelic poster: op-art rings, vibrating colour, spiral ---------- */
+  [data-s="psych"] { background:repeating-radial-gradient(circle at 50% 230px,#2B0B4F 0 26px,#3A1168 26px 52px); }
+  [data-s="psych"] .mast { border-bottom:0; background:repeating-linear-gradient(90deg,#FF3DA5 0 16px,#FFE14D 16px 32px,#FF7A1A 32px 48px) bottom/100% 6px no-repeat; padding-bottom:20px; }
+  [data-s="psych"] .brand { font-weight:400; color:#FFE14D; text-shadow:2px 2px 0 #FF7A1A,4px 4px 0 #FF3DA5; }
+  [data-s="psych"] h1 { font-weight:400; font-size:54px; color:#FFE14D; text-shadow:3px 3px 0 #FF7A1A,6px 6px 0 #FF3DA5,9px 9px 0 #7A1FD1; transform:rotate(-2deg); margin:10px 0 8px; }
+  [data-s="psych"] .kicker { color:#5CF2C0; }
+  [data-s="psych"] .btn { box-shadow:4px 4px 0 #FFE14D; }
+  [data-s="psych"] .wheel .spiral { display:block; } [data-s="psych"] .wheel .pulse, [data-s="psych"] .wheel .spin { display:none; }
+  [data-s="psych"] .wheel .cmoon { display:none; }
+  [data-s="psych"] .sech { color:#FFE14D; } [data-s="psych"] .sech::before, [data-s="psych"] .sech::after { height:6px; border-radius:3px; background:repeating-linear-gradient(90deg,#FF3DA5 0 12px,#FFE14D 12px 24px,#FF7A1A 24px 36px); }
+  [data-s="psych"] .panel { border:3px solid var(--line); border-radius:28px; }
+  [data-s="psych"] .cell { border-radius:16px; }
+  [data-s="psych"] .ecard { border:3px solid var(--c); border-radius:28px; box-shadow:6px 6px 0 var(--c); } [data-s="psych"] .ecard h3 { font-family:var(--hfont); font-weight:400; font-size:24px; }
+  [data-s="psych"] .tabs { border-top:6px solid #FF3DA5; }
+  @media (min-width:900px) { [data-s="psych"] h1 { font-size:86px; } [data-s="psych"] { background:repeating-radial-gradient(circle at calc(50% + 350px) 330px,#2B0B4F 0 26px,#3A1168 26px 52px); } }
+
+  /* ---------- 3. Art Nouveau: arches, vines, sage and gold ---------- */
+  [data-s="nouveau"] .mast { border-bottom:0; background:radial-gradient(circle at 50% 100%,var(--rule) 0 3px,transparent 3.5px), linear-gradient(90deg,transparent,var(--rule) 15% 46%,transparent 46% 54%,var(--rule) 54% 85%,transparent) 0 calc(100% - 2px)/100% 1px no-repeat; padding-bottom:18px; }
+  [data-s="nouveau"] .brand { font-weight:400; color:var(--good); letter-spacing:.03em; }
+  [data-s="nouveau"] h1 { font-weight:400; color:var(--good); } [data-s="nouveau"] h1 em { color:var(--accent); font-style:normal; }
+  [data-s="nouveau"] .lead { font-style:italic; }
+  [data-s="nouveau"] .btn { border:1.5px solid var(--accent); box-shadow:inset 0 0 0 3px var(--btnbg), inset 0 0 0 4px rgba(249,243,227,.6); padding:14px 26px; }
+  [data-s="nouveau"] .panel { border-radius:28px; border-width:1.5px; }
+  [data-s="nouveau"] .cell { border-radius:16px 16px 4px 4px; }
+  [data-s="nouveau"] .ecard { border-radius:160px 160px 16px 16px; border-width:1.5px; outline:1px solid var(--line); outline-offset:-7px; padding:40px 26px 24px; text-align:center; align-items:center; }
+  [data-s="nouveau"] .ecard .top { flex-direction:column; align-items:center; gap:2px; } [data-s="nouveau"] .num { color:var(--accent); font-size:20px; }
+  [data-s="nouveau"] .sym { width:76px; height:76px; border-radius:50%; border:1.5px solid var(--c); display:grid; place-items:center; box-shadow:0 0 0 5px var(--card), 0 0 0 6px var(--line); }
+  [data-s="nouveau"] .meta { width:100%; }
+  [data-s="nouveau"] .deco svg { position:absolute; top:0; width:330px; opacity:.6; } [data-s="nouveau"] .deco svg:nth-child(1) { left:-40px; } [data-s="nouveau"] .deco svg:nth-child(2) { right:-40px; transform:scaleX(-1); }
+  @media (max-width:899px) { [data-s="nouveau"] .deco svg { width:190px; opacity:.4; } }
+
+  /* ---------- 4. Tarot: the dates are cards on a dark table ---------- */
+  [data-s="tarot"] { background:radial-gradient(ellipse 90% 700px at 50% 0,#33204D,#190F26) #190F26; }
+  [data-s="tarot"] .mast { border-bottom:3px double var(--rule); }
+  [data-s="tarot"] .brand, [data-s="tarot"] h1 { text-transform:uppercase; letter-spacing:.1em; font-weight:500; background:linear-gradient(180deg,#F3DFA9,#B8924C); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  [data-s="tarot"] h1 { font-size:38px; }
+  [data-s="tarot"] .btn { border-radius:4px; letter-spacing:.14em; text-transform:uppercase; font-size:12px; padding:13px 22px; }
+  [data-s="tarot"] .panel { border-radius:10px; outline:1px solid var(--line); outline-offset:-6px; }
+  [data-s="tarot"] .cell .n, [data-s="tarot"] .dayp h3 { font-weight:500; }
+  [data-s="tarot"] .ecard { --body:#4A3A4F; --soft:#7D6C82; --good:#2E7D6B; --care:#B5442E; --key:#6B3FA0; --line:rgba(42,27,51,.22); background:#F3E7CC; color:#2A1B33; border:0; border-radius:14px;
+    padding:30px 26px 26px; text-align:center; align-items:center; min-height:430px;
+    box-shadow:inset 0 0 0 7px #F3E7CC, inset 0 0 0 8.5px #B08D3C, inset 0 0 0 12px #F3E7CC, inset 0 0 0 13px #B08D3C, 0 14px 34px rgba(0,0,0,.5); }
+  [data-s="tarot"] .ecard .top { flex-direction:column; align-items:center; gap:0; } [data-s="tarot"] .num { color:#B08D3C; font-size:22px; font-weight:700; }
+  [data-s="tarot"] .sym { margin:18px 0 14px; } [data-s="tarot"] .sym svg { width:84px; height:84px; }
+  [data-s="tarot"] .ecard h3 { text-transform:uppercase; letter-spacing:.06em; font-size:18px; font-weight:700; margin-top:6px; }
+  [data-s="tarot"] .meta { width:100%; } [data-s="tarot"] .ecard.past { opacity:.6; }
+  [data-s="tarot"] .deco svg { position:absolute; left:50%; top:0; width:1300px; margin-left:-650px; color:var(--accent); opacity:.5; }
+  @media (min-width:900px) { [data-s="tarot"] h1 { font-size:60px; } [data-s="tarot"] .ecard:nth-child(odd) { transform:rotate(-1.2deg); } [data-s="tarot"] .ecard:nth-child(even) { transform:rotate(1deg) translateY(8px); } [data-s="tarot"] .cards { gap:28px; } }
+
+  /* ---------- 5. Cosmic retro: 70s print, grain, striped suns ---------- */
+  [data-s="riso"] { background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 .23 0 0 0 0 .11 0 0 0 0 .05 0 0 0 .22 0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E") var(--paper); }
+  [data-s="riso"] .mast { border-bottom:3px solid var(--rule); }
+  [data-s="riso"] .brand { font-weight:400; color:var(--accent2); text-shadow:2px 2px 0 rgba(228,87,46,.8); }
+  [data-s="riso"] h1 { font-weight:400; color:var(--accent); text-shadow:4px 3px 0 rgba(31,122,140,.8); letter-spacing:.01em; } [data-s="riso"] h1 em { font-style:normal; color:var(--key); }
+  [data-s="riso"] .kicker { color:var(--accent2); }
+  [data-s="riso"] .btn { border:2px solid var(--ink); box-shadow:4px 4px 0 var(--accent2); }
+  [data-s="riso"] .panel { border:2px solid var(--ink); border-radius:22px; box-shadow:6px 6px 0 var(--accent2); } [data-s="riso"] .dayp { box-shadow:6px 6px 0 var(--key); }
+  [data-s="riso"] .cell { border-radius:12px; }
+  [data-s="riso"] .ecard { background:var(--c); color:#FBF4E6; --body:#FBF4E6; --soft:rgba(251,244,230,.82); --line:rgba(251,244,230,.45); border:2px solid #3A1D0E; border-radius:22px; }
+  [data-s="riso"] .ecard.key { color:#3A1D0E; --body:#3A1D0E; --soft:rgba(58,29,14,.78); --line:rgba(58,29,14,.4); }
+  [data-s="riso"] .ecard .type, [data-s="riso"] .ecard .sym { color:inherit; } [data-s="riso"] .ecard h3 { font-family:var(--hfont); font-weight:400; font-size:23px; }
+  [data-s="riso"] .ecard.now .when::after { color:inherit; }
+  [data-s="riso"] .tabs { border-top:3px solid var(--rule); }
+  [data-s="riso"] .deco i { position:absolute; border-radius:50%; mix-blend-mode:multiply; }
+  @media (max-width:899px) { [data-s="riso"] .deco { transform:scale(.6); transform-origin:50% 0; width:166%; left:-33%; } }
+
+  /* ---------- 6. Grimoire: black page, bone type, wax red ---------- */
+  [data-s="grimoire"] .mast { border-bottom:1px solid var(--rule); }
+  [data-s="grimoire"] .brand { font-weight:700; font-size:40px; }
+  [data-s="grimoire"] .kicker { font-family:var(--tfont); font-style:italic; text-transform:none; letter-spacing:.02em; font-size:18px; font-weight:400; }
+  [data-s="grimoire"] h1 { font-weight:700; font-size:52px; } [data-s="grimoire"] h1 em { font-style:normal; color:var(--accent); }
+  [data-s="grimoire"] .lead { font-family:var(--tfont); font-style:italic; font-size:20px; }
+  [data-s="grimoire"] .btn { border-radius:2px; letter-spacing:.14em; text-transform:uppercase; font-size:12px; padding:13px 22px; border:1px solid #C23B30; }
+  [data-s="grimoire"] .panel, [data-s="grimoire"] .cell { border-radius:0; }
+  [data-s="grimoire"] .ecard { border-radius:0; border-left:3px solid var(--c); padding:22px; } [data-s="grimoire"] .num { color:var(--accent); font-size:22px; }
+  [data-s="grimoire"] .ecard h3, [data-s="grimoire"] .dev h4 { font-size:24px; } [data-s="grimoire"] .ecard p { font-family:var(--tfont); font-size:16.5px; }
+  [data-s="grimoire"] .sech { font-family:var(--tfont); font-style:italic; text-transform:none; letter-spacing:.04em; font-size:17px; font-weight:400; }
+  [data-s="grimoire"] .deco svg { position:absolute; left:50%; top:20px; width:1300px; margin-left:-650px; color:#E6DDC8; opacity:.13; }
+  @media (min-width:900px) { [data-s="grimoire"] .brand { font-size:60px; } [data-s="grimoire"] h1 { font-size:88px; } }
+</style>
+</head>
+<body>
+<div class="deco" id="deco"></div>
+<div class="switch" id="switch" title="Mockup only: switch the style">
+  <button data-s="atlas">Star Atlas</button><button data-s="psych">Psychedelic</button><button data-s="nouveau">Art Nouveau</button><button data-s="tarot">Tarot</button><button data-s="riso">Cosmic Retro</button><button data-s="grimoire">Grimoire</button>
+</div>
+<header class="mast">
+  <div class="dateline"><span id="date"></span><span id="who"></span></div>
+  <div class="brand">Moroscope</div>
+  <nav><a class="on" href="#">Month</a><a href="#">Sources</a><a href="#">You</a></nav>
+</header>
+<section class="hero">
+  <div id="wheel"></div>
+  <div>
+    <p class="kicker">Your month, from the astrologers you trust</p>
+    <h1 id="title"></h1>
+    <p class="lead" id="theme"></p>
+    <div class="actions"><button class="btn">Add the month to my calendar</button><span id="updated"></span></div>
+  </div>
+</section>
+<main>
+  <section class="sec"><h2 class="sech">The month</h2>
+    <div class="calrow">
+      <div class="panel"><div class="grid" id="grid"></div>
+        <div class="legend" id="legend"></div></div>
+      <div class="panel dayp" id="day"></div>
+    </div>
+  </section>
+  <section class="sec"><h2 class="sech">The dates</h2><div class="cards" id="cards"></div></section>
+  <section class="sec"><h2 class="sech">Read for this forecast</h2><ul class="src" id="src"></ul></section>
+</main>
+<nav class="tabs"><a class="on" href="#">Month</a><a href="#">Sources</a><a href="#">You</a></nav>
+<script src="data.js"></script>
+<script>
+  const M = window.MOCK, $ = (id) => document.getElementById(id);
+  // Icons: a sun for "good time to", an eye for "be careful", a star for "key date".
+  const ICON = {
+    good: '<circle cx="12" cy="12" r="4.2" fill="currentColor" stroke="none"/>' + Array.from({ length: 8 }, (_, i) => `<line x1="12" y1="2" x2="12" y2="5.2" transform="rotate(${i * 45} 12 12)"/>`).join(''),
+    care: '<path d="M2 12C5 6.6 8.5 5 12 5s7 1.6 10 7c-3 5.4-6.500 7-10 7S5 17.400 2 12Z"/><circle cx="12" cy="12" r="2.800" fill="currentColor" stroke="none"/>',
+    key: '<path d="M12 1.500Q12 12 22.500 12Q12 12 12 22.500Q12 12 1.500 12Q12 12 12 1.500Z" fill="currentColor" stroke="none"/>',
+  };
+  const icon = (t) => `<svg class="ic ${t}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.700" stroke-linecap="round" stroke-linejoin="round">${ICON[t]}</svg>`;
+  // Approximate moon phase: 0 = new (9 Nov), 0.5 = full.
+  const phase = (d) => ((((d - 9) / 29.53) % 1) + 1) % 1;
+  const phaseName = (p) => p < .03 || p > .97 ? 'New Moon' : p < .22 ? 'Waxing crescent' : p < .28 ? 'First quarter' : p < .47 ? 'Waxing gibbous' : p < .53 ? 'Full Moon' : p < .72 ? 'Waning gibbous' : p < .78 ? 'Last quarter' : 'Waning crescent';
+  const moonG = (p, r) => {
+    const wan = p > .5, q = wan ? 1 - p : p, k = Math.cos(2 * Math.PI * q);
+    return `<g${wan ? ' transform="scale(-1 1)"' : ''}><circle r="${r}" fill="none" stroke="currentColor" stroke-width="${r / 9}"/><path d="M0 ${-r}A${r} ${r} 0 0 1 0 ${r}A${(Math.abs(k) * r).toFixed(2)} ${r} 0 0 ${k > 0 ? 0 : 1} 0 ${-r}Z" fill="currentColor" stroke="none"/></g>`;
+  };
+  const moon = (d) => `<svg class="moon" viewBox="-12 -12 24 24">${moonG(phase(d), 10)}</svg>`;
+
+  $('date').textContent = `${M.wd(M.today)} ${M.today} ${M.month} ${M.year}`;
+  $('who').textContent = `${M.glyph} ${M.sign} edition`;
+  $('title').innerHTML = `${M.month} <em>${M.year}</em>`;
+  $('theme').textContent = M.theme;
+  $('updated').textContent = `Updated today · ${M.usedCount} of ${M.sources.length} sources had a forecast`;
+  $('legend').innerHTML = ['good', 'care', 'key'].map((t) => `<span>${icon(t)}${M.typeLabel[t]}</span>`).join('');
+  $('src').innerHTML = M.sources.map((s) => `<li>${s.name}<em>${s.status}</em></li>`).join('');
+
+  // Zodiac wheel, the user's sign at the top.
+  const SIGNS = ['Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo', 'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'];
+  const pol = (r, deg) => { const a = (deg - 90) * Math.PI / 180; return [(200 + r * Math.cos(a)).toFixed(1), (200 + r * Math.sin(a)).toFixed(1)]; };
+  const P = (r, deg) => pol(r, deg).join(' ');
+  const ring = (r, extra = '') => `<circle cx="200" cy="200" r="${r}" ${extra}/>`;
+  const me = SIGNS.indexOf(M.sign);
+  let w = `<svg class="wheel" viewBox="0 0 400 400" fill="none" stroke="currentColor" stroke-width="1.300">
+    <path class="hl" d="M${P(192, -15)}A192 192 0 0 1 ${P(192, 15)}L${P(152, 15)}A152 152 0 0 0 ${P(152, -15)}Z"/>${ring(192, 'stroke-width="2"')}${ring(152)}`;
+  for (let i = 0; i < 12; i++) {
+    const deg = (i - me) * 30, [x, y] = pol(172, deg);
+    w += `<line x1="${pol(152, deg + 15)[0]}" y1="${pol(152, deg + 15)[1]}" x2="${pol(192, deg + 15)[0]}" y2="${pol(192, deg + 15)[1]}"/>
+      <text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central"${i === me ? ' class="me"' : ''}>${String.fromCharCode(0x2648 + i)}\uFE0E</text>`;
+  }
+  let ticks = '';
+  for (let i = 0; i < 72; i++) ticks += `<line x1="200" y1="${i % 6 ? 62 : 56}" x2="200" y2="70" transform="rotate(${i * 5} 200 200)"/>`;
+  const spiral = (turn) => {
+    let d = '';
+    for (let i = 0; i <= 360; i++) { const t = i / 360 * 5 * 2 * Math.PI, r = 4 + 132 * i / 360; d += `${i ? 'L' : 'M'}${(200 + r * Math.cos(t + turn)).toFixed(1)} ${(200 + r * Math.sin(t + turn)).toFixed(1)}`; }
+    return d;
+  };
+  w += `<g class="spin">${ring(146, 'stroke-dasharray="2 8"')}${ticks}</g>
+    <g class="pulse">${[118, 100, 84, 70, 57, 45, 34].map((r) => ring(r, 'stroke-width=".9"')).join('')}</g>
+    <g class="spiral"><path d="${spiral(0)}" stroke="var(--accent2)" stroke-width="13" stroke-linecap="round"/><path d="${spiral(Math.PI)}" stroke="var(--accent)" stroke-width="13" stroke-linecap="round"/></g>
+    <g class="cmoon" transform="translate(200 200)" style="transform-origin:0 0">${moonG(phase(M.today), 21)}</g></svg>`;
+  $('wheel').outerHTML = w;
+
+  // Calendar and day panel.
+  let sel = M.today;
+  function render() {
+    let g = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => `<b>${d}</b>`).join('') + '<span></span>'.repeat((M.dow(1) + 6) % 7);
+    for (let d = 1; d <= M.days; d++) {
+      const cls = [d < M.today ? 'past' : '', d === M.today ? 'today' : '', d === sel ? 'sel' : ''].join(' ');
+      g += `<button class="cell ${cls}" data-day="${d}" aria-label="${d} ${M.month}"><span class="n">${d}</span>${moon(d)}<span class="marks">${M.on(d).map((e) => icon(e.type)).join('')}</span></button>`;
+    }
+    $('grid').innerHTML = g;
+    const evs = M.on(sel);
+    let h = `<div class="phase">${moon(sel)}${phaseName(phase(sel))}${sel === M.today ? ' · today' : ''}</div><h3>${M.wd(sel)} ${sel} ${M.month}</h3>`;
+    h += evs.map((e) => `<div class="dev ${e.type}">${icon(e.type)}<div><div class="type">${M.typeLabel[e.type]} · ${M.range(e)}</div><h4>${e.title}</h4><p>${e.summary}</p></div></div>`).join('');
+    if (!evs.length) {
+      const next = M.events.find((e) => e.from > sel);
+      h += `<p class="none">No source wrote about this day. That is not a bad sign, just a quiet one.</p>`;
+      if (next) h += `<button class="next" data-day="${next.from}"><b>Next:</b> ${next.title} · ${M.range(next)}</button>`;
+    }
+    $('day').innerHTML = h;
+  }
+  document.addEventListener('click', (ev) => {
+    const el = ev.target.closest('[data-day]');
+    if (el) { sel = +el.dataset.day; render(); }
+  });
+  render();
+
+  // The dates as cards.
+  const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+  $('cards').innerHTML = M.events.map((e, i) => {
+    const state = M.end(e) < M.today ? ' past' : e.from <= M.today ? ' now' : '';
+    return `<article class="ecard ${e.type}${state}"><div class="top"><span class="num">${ROMAN[i]}</span><span class="when">${M.range(e)}</span></div>
+      <div class="sym">${icon(e.type)}</div><div class="type">${M.typeLabel[e.type]}</div><h3>${e.title}</h3><p>${e.summary}</p>
+      <div class="meta">${e.topics.join(', ')} · ${e.sources.join(', ')}</div></article>`;
+  }).join('');
+  const nowCard = document.querySelector('.ecard.now') || document.querySelector('.ecard:not(.past)');
+  if (nowCard) $('cards').scrollLeft = nowCard.offsetLeft - $('cards').offsetLeft - 20;
+
+  // Background decoration per style.
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  let sky = '';
+  for (let i = 0; i < 90; i++) sky += `<circle cx="${(rnd() * 1300).toFixed(0)}" cy="${(rnd() * 900).toFixed(0)}" r="${(0.6 + rnd() * 1.300).toFixed(1)}" fill="currentColor"/>`;
+  let cons = '';
+  for (const [cx, cy] of [[120, 150], [330, 520], [1010, 120], [1150, 470], [640, 40], [80, 700], [900, 760]]) {
+    let x = cx, y = cy; const pts = [];
+    for (let i = 0, n = 4 + Math.floor(rnd() * 3); i < n; i++) { pts.push([x.toFixed(0), y.toFixed(0)]); x += 30 + rnd() * 70; y += rnd() * 110 - 55; }
+    cons += `<polyline points="${pts.map((p) => p.join(',')).join(' ')}" fill="none" stroke="currentColor" stroke-width="1"/>` + pts.map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="3.200" fill="currentColor"/>`).join('');
+  }
+  const arcs = [300, 420, 560].map((r) => `<circle cx="1300" cy="0" r="${r}" fill="none" stroke="currentColor" stroke-width=".8" stroke-dasharray="1 6"/><circle cx="0" cy="900" r="${r}" fill="none" stroke="currentColor" stroke-width=".8" stroke-dasharray="1 6"/>`).join('');
+  const vine = `<svg viewBox="0 0 330 620" fill="none" stroke-linecap="round"><path d="M10 0C150 40 250 150 150 250S20 420 170 480s120 120 60 140" stroke="#7A8F6A" stroke-width="2.500"/>
+    <path d="M60 0C170 60 200 140 130 215S60 400 150 455" stroke="#B08D3C" stroke-width="1.300"/>
+    ${[[178, 120, 30], [118, 262, -40], [75, 370, 20], [190, 492, 60], [232, 560, 10]].map(([x, y, r]) => `<path d="M${x} ${y}q26-22 52 0q-26 22-52 0Z" fill="#7A8F6A" opacity=".7" transform="rotate(${r} ${x} ${y})"/>`).join('')}
+    ${[[150, 250], [170, 480], [130, 215]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="6" fill="#C08A84"/><circle cx="${x}" cy="${y}" r="11" stroke="#B08D3C" stroke-width="1"/>`).join('')}</svg>`;
+  const marg = ['\u2609', '\u263D', '\u263F', '\u2640', '\u2642', '\u2643', '\u2644'].map((c, i) => `<text x="62" y="${190 + i * 84}" font-size="34" text-anchor="middle" fill="currentColor">${c}\uFE0E</text><text x="1238" y="${190 + i * 84}" font-size="34" text-anchor="middle" fill="currentColor">${c}\uFE0E</text>`).join('');
+  const DECO = {
+    atlas: `<svg viewBox="0 0 1300 900">${sky}${cons}${arcs}</svg>`,
+    psych: '',
+    nouveau: vine + vine,
+    tarot: `<svg viewBox="0 0 1300 900">${sky}</svg>`,
+    riso: `<i style="right:-70px;top:120px;width:300px;height:300px;background:repeating-linear-gradient(#E4572E 0 18px,transparent 18px 28px);opacity:.55"></i>
+      <i style="left:3%;top:210px;width:120px;height:120px;background:#1F7A8C;opacity:.5"></i>
+      <i style="left:calc(3% - 40px);top:252px;width:200px;height:36px;border:5px solid #E4572E;transform:rotate(-18deg);opacity:.7"></i>`,
+    grimoire: `<svg viewBox="0 0 1300 900" fill="none" stroke="currentColor" stroke-width="2"><circle cx="650" cy="330" r="300"/><circle cx="650" cy="330" r="150"/><path d="M650 30 909.800 480H390.200Z"/><rect x="500" y="180" width="300" height="300"/>${marg}</svg>`,
+  };
+  const setStyle = (s) => {
+    if (!(s in DECO)) s = 'atlas';
+    document.body.dataset.s = s;
+    $('deco').innerHTML = DECO[s];
+    document.querySelectorAll('#switch button').forEach((b) => b.classList.toggle('on', b.dataset.s === s));
+  };
+  $('switch').addEventListener('click', (ev) => ev.target.dataset.s && setStyle(ev.target.dataset.s));
+  setStyle(new URLSearchParams(location.search).get('s') || 'atlas');
+</script>
+</body>
+</html>

@@ -1,20 +1,102 @@
-export type ZodiacSign =
-  | 'Aries'
-  | 'Taurus'
-  | 'Gemini'
-  | 'Cancer'
-  | 'Leo'
-  | 'Virgo'
-  | 'Libra'
-  | 'Scorpio'
-  | 'Sagittarius'
-  | 'Capricorn'
-  | 'Aquarius'
-  | 'Pisces';
+import type {
+  ChartResponse,
+  CuratedSourceInfo,
+  Evidence,
+  ForecastEvent,
+  LifeContext,
+  MonthlyForecast,
+  PersonalProfile,
+  SourceReport,
+  SynthesizeRequest,
+  UpcomingEvent,
+} from './api.generated';
+
+// The shapes that travel between the browser and the server are generated from the backend models
+// (`npm run gen:types`). This file names them for the app and adds what exists on the device only.
+export type { ForecastEvent, LifeContext, MonthlyForecast, SourceReport, UpcomingEvent };
+
+export type ZodiacSign = ChartResponse['sun'];
+
+// The one taxonomy: profile focus, event tags, map rows and calendar text.
+export type LifeArea = ForecastEvent['lifeAreas'][number];
+export type EventType = ForecastEvent['type'];
 
 export type ElementType = 'Fire' | 'Earth' | 'Air' | 'Water';
 export type ModalityType = 'Cardinal' | 'Fixed' | 'Mutable';
 
+export type SourceType = 'newspaper' | 'column' | 'blog' | 'video';
+
+// Kept under their earlier names in the app.
+export type TransitEvent = ForecastEvent;
+export type ForecastResult = MonthlyForecast;
+
+export interface BirthPlace {
+  label: string;
+  lat: number;
+  lon: number;
+  tz: string; // IANA timezone of the place
+}
+
+// The last server-calculated chart, with the birth data it was calculated from.
+export type NatalChart = ChartResponse & { basis: string };
+
+export type ProfileMode = 'general' | 'personal';
+
+export type RelationshipStatus = NonNullable<LifeContext['relationship']>;
+export type WorkStatus = NonNullable<LifeContext['work']>;
+export type MoneyFocus = NonNullable<LifeContext['moneyFocus']>;
+export type KidsStage = NonNullable<LifeContext['kids']>[number];
+export type HealthFocus = NonNullable<LifeContext['healthFocus']>[number];
+
+// What the server accepts as a profile: a general one (sign only) or a personal one.
+export type ProfileRequest = SynthesizeRequest['profile'];
+
+type PersonalFields = Required<Omit<PersonalProfile, 'mode' | 'lifeContext' | 'risingSign'>>;
+
+// The profile as kept on the device: the fields the server knows, plus device-only ones.
+export interface UserProfile extends PersonalFields {
+  // 'general': only a sign is known (kept in sunSign). 'personal': birth data and life context.
+  mode: ProfileMode;
+  // Every answer is optional. Sent to the forecast model in personal mode; never stored on the server.
+  lifeContext?: LifeContext;
+  risingSign?: ZodiacSign;
+  birthPlace?: BirthPlace; // chosen from the place search; needed for the Rising sign
+  chart?: NatalChart; // last server-calculated chart; the signs may be manual overrides
+  backendUrl: string;
+}
+
+export type CuratedSource = CuratedSourceInfo;
+
+export interface UserSource {
+  id: string;
+  url: string;
+  active: boolean;
+}
+
+// The user's choices on the Sources tab. Active user sources are used instead of the default ones.
+export interface SourceSettings {
+  disabledCurated: string[];
+  user: UserSource[];
+}
+
+export type SourceStatus = SourceReport['status'];
+
+export type ForecastEvidence = Evidence;
+
+// One generated forecast as kept on the device, with what it was made for.
+export interface StoredForecast {
+  result: ForecastResult;
+  generatedAt: string;
+  targetMonth: string;
+  focusAreas: LifeArea[];
+  sign: ZodiacSign; // the sign the sources were read for
+  mode: ProfileMode;
+  profileId: string | null;
+  sources: SourceReport[];
+  evidence: ForecastEvidence | null;
+}
+
+// Everything below is only used by the hidden energy charts (synthetic data).
 export type ActivityCategory =
   | 'career'
   | 'social'
@@ -33,161 +115,6 @@ export type EnergyDimension =
   | 'social'
   | 'financialRisk';
 
-export type SourceType = 'newspaper' | 'column' | 'blog' | 'video';
-
-export type LifePriority =
-  | 'careerTransition'
-  | 'contractNegotiations'
-  | 'datingRomance'
-  | 'healthHabits'
-  | 'financialPlanning';
-
-export type ImpactType = 'Opportunity' | 'Caution' | 'Milestone';
-
-export interface TransitEvent {
-  date: string;
-  end_date?: string;
-  title: string;
-  impact_type: ImpactType;
-  summary: string;
-  topics: LifePriority[];
-  source_urls: string[];
-}
-
-export interface ForecastResult {
-  overall_theme: string;
-  events: TransitEvent[];
-  ics_content: string;
-}
-
-export interface BirthPlace {
-  label: string;
-  lat: number;
-  lon: number;
-  tz: string; // IANA timezone of the place
-}
-
-export interface NatalChart {
-  sun: ZodiacSign;
-  moon: ZodiacSign;
-  rising?: ZodiacSign; // only with a known birth time and a birth place
-  sunUncertain: boolean; // birth time unknown and the sign changed that day
-  moonUncertain: boolean;
-  basis: string; // the birth data this chart was calculated from
-}
-
-export type ProfileMode = 'general' | 'personal';
-
-export type RelationshipStatus =
-  | 'single'
-  | 'dating'
-  | 'inRelationship'
-  | 'married'
-  | 'separated'
-  | 'complicated';
-
-export type WorkStatus =
-  | 'employed'
-  | 'jobSeeking'
-  | 'consideringChange'
-  | 'selfEmployed'
-  | 'student'
-  | 'parentalLeave'
-  | 'retired';
-
-export type MoneyFocus = 'saving' | 'bigPurchase' | 'investing' | 'debt';
-export type KidsStage =
-  | 'none'
-  | 'trying'
-  | 'expecting'
-  | 'under5'
-  | 'age5to12'
-  | 'teens'
-  | 'adult';
-export type HealthFocus = 'fitness' | 'sleep' | 'stress' | 'nutrition' | 'habit';
-
-export interface UpcomingEvent {
-  date: string; // YYYY-MM-DD
-  label: string;
-}
-
-// Every answer is optional. Sent to the forecast model in personal mode; never stored on the server.
-export interface LifeContext {
-  relationship?: RelationshipStatus;
-  lookingForPartner?: boolean;
-  work?: WorkStatus;
-  kids?: KidsStage[];
-  caringForParents?: boolean;
-  moneyFocus?: MoneyFocus;
-  healthFocus?: HealthFocus[];
-  goals?: string;
-  upcomingEvents?: UpcomingEvent[];
-}
-
-export interface UserProfile {
-  // 'general': only a sign is known (kept in sunSign). 'personal': birth data and life context.
-  mode: ProfileMode;
-  lifeContext?: LifeContext;
-  name: string;
-  birthDate: string; // YYYY-MM-DD
-  birthTime: string; // HH:mm
-  hasExactTime: boolean;
-  birthLocation: string;
-  birthPlace?: BirthPlace; // chosen from the place search; needed for the Rising sign
-  birthTimezone: string; // IANA timezone for birth calculation
-  operatingTimezone: string; // IANA timezone for daily schedule & transits
-  sunSign: ZodiacSign;
-  moonSign: ZodiacSign;
-  risingSign?: ZodiacSign;
-  chart?: NatalChart; // last server-calculated chart; the signs above may be manual overrides
-  useRisingPrimary: boolean; // When true and hasExactTime is true, Rising sign rules chart
-  activeCategories: ActivityCategory[];
-  targetMonth: string;
-  priorities: LifePriority[];
-  backendUrl: string;
-}
-
-export interface CuratedSource {
-  id: string;
-  name: string;
-  author: string;
-  type: 'video' | 'website';
-  url: string;
-  language: string;
-  cadence: string;
-}
-
-export interface UserSource {
-  id: string;
-  url: string;
-  active: boolean;
-}
-
-// The user's choices on the Sources tab. Active user sources are used instead of the default ones.
-export interface SourceSettings {
-  disabledCurated: string[];
-  user: UserSource[];
-}
-
-export type SourceStatus = 'used' | 'no_forecast' | 'failed';
-
-// What happened to one source while a forecast was generated.
-export interface SourceReport {
-  id: string;
-  name: string;
-  url: string;
-  origin: 'curated' | 'user' | 'web';
-  status: SourceStatus;
-  reason?: string;
-  documents: number;
-}
-
-export interface ForecastEvidence {
-  mode: 'user' | 'curated' | 'web';
-  gap: boolean; // true when no source had anything for the month
-}
-
-// Only used by the hidden energy charts (synthetic data).
 export interface HoroscopeSource {
   id: string;
   name: string;

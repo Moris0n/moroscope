@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from app.config import PipelineError, load_agent_config, load_allowed_hosts
+from app.models import parse_profile
 from app.pipeline import run_forecast_pipeline
 from app.prompts import FORECAST_AGENT_PROMPT, QUERY_AGENT_PROMPT
 from app.sources import validate_sources_config
@@ -18,7 +19,6 @@ from .helpers import (
     DEFAULT_QUERY,
     FULL_ENV,
     RUX_SCORPIO_URL,
-    RUX_VIDEO_URL,
     SALLY_URL,
     UUID_PATTERN,
     VALID_PROFILE,
@@ -26,6 +26,7 @@ from .helpers import (
     fixture,
     make_deps,
     profile_files,
+    profile_model,
     source_pages,
     valid_event,
     valid_forecast,
@@ -41,7 +42,7 @@ async def run(
         errors, config = validate_sources_config(sources)
         assert errors == []
     return await run_forecast_pipeline(
-        profile, excerpt, make_deps(upstream), on_step, profile_id, config
+        parse_profile(profile), excerpt, make_deps(upstream), on_step, profile_id, config
     )
 
 
@@ -63,7 +64,7 @@ LIFE_CONTEXT = {
 
 
 def cited_forecast(*urls):
-    return valid_forecast(events=[valid_event(source_urls=list(urls))])
+    return valid_forecast(events=[valid_event(sourceUrls=list(urls))])
 
 
 async def test_curated_sources_are_read_directly_without_any_search():
@@ -83,7 +84,6 @@ async def test_curated_sources_are_read_directly_without_any_search():
         "label": "November 2026",
     }
     assert [d["url"] for d in data["documents"]] == [
-        RUX_VIDEO_URL,
         RUX_SCORPIO_URL,
         CAFE_URL,
         AZ_SCORPIO_URL,
@@ -105,7 +105,7 @@ async def test_curated_sources_are_read_directly_without_any_search():
         ("astrostyle", "used"),
         ("sally-kirkman", "used"),
     ]
-    assert out["result"]["events"][0]["source_urls"] == [SALLY_URL]
+    assert out["result"]["events"][0]["sourceUrls"] == [SALLY_URL]
     assert re.match(UUID_PATTERN, out["profileId"])
 
 
@@ -128,7 +128,7 @@ async def test_no_name_or_birth_data_ever_leaves_the_server():
         assert person == {
             "sign": "Scorpio",
             "signKind": "rising",
-            "focusTopics": ["careerTransition", "financialPlanning"],
+            "focusAreas": ["career", "money"],
             "sunSign": "Libra",
             "moonSign": "Taurus",
             "risingSign": "Scorpio",
@@ -143,15 +143,13 @@ async def test_no_name_or_birth_data_ever_leaves_the_server():
         }
     # The search query agent never sees the life context.
     query = user_payload(upstream.calls[0])
-    assert set(query) == {"sign", "signKind", "month", "focusTopics"}
+    assert set(query) == {"sign", "signKind", "month", "focusAreas"}
     assert "interview" not in json.dumps(upstream.calls[1]["body"])
 
 
 async def test_life_context_is_not_written_to_the_profile_snapshot():
     deps = make_deps(Upstream(pages=source_pages(), nebius_outputs=[cited_forecast(CAFE_URL)]))
-    await run_forecast_pipeline(
-        {**VALID_PROFILE, "lifeContext": LIFE_CONTEXT}, None, deps, lambda s: None
-    )
+    await run_forecast_pipeline(profile_model(lifeContext=LIFE_CONTEXT), None, deps, lambda s: None)
     stored = profile_files(deps)[0].read_text()
     assert "lifeContext" not in stored and "interview" not in stored
 
@@ -165,17 +163,17 @@ async def test_general_mode_keeps_and_sends_only_the_sign():
     }
     upstream = Upstream(pages=source_pages(), nebius_outputs=[cited_forecast(CAFE_URL)])
     deps = make_deps(upstream)
-    await run_forecast_pipeline(profile, None, deps, lambda s: None)
+    await run_forecast_pipeline(parse_profile(profile), None, deps, lambda s: None)
     assert json.loads(profile_files(deps)[0].read_text()) == {
         "mode": "general",
         "sunSign": "Scorpio",
         "targetMonth": "November 2026",
-        "priorities": ["careerTransition", "financialPlanning"],
+        "focusAreas": ["career", "money"],
     }
     assert user_payload(upstream.calls[0])["person"] == {
         "sign": "Scorpio",
         "signKind": "chosen",
-        "focusTopics": ["careerTransition", "financialPlanning"],
+        "focusAreas": ["career", "money"],
     }
 
 
@@ -191,8 +189,8 @@ async def test_user_sources_are_exclusive_and_a_gap_is_never_filled_silently():
     assert steps == [1, 2, 3, 4]
     assert out["evidence"] == {"mode": "user", "gap": True}
     assert out["result"]["events"] == []
-    assert "None of your sources" in out["result"]["overall_theme"]
-    assert "END:VCALENDAR" in out["result"]["ics_content"]
+    assert "None of your sources" in out["result"]["theme"]
+    assert "END:VCALENDAR" in out["result"]["icsContent"]
     assert [(s["id"], s["origin"], s["status"]) for s in out["sources"]] == [
         ("u1", "user", "failed")
     ]
@@ -275,12 +273,14 @@ async def test_two_nebius_calls_bracket_exactly_one_tavily_call_in_order():
     assert query_call["body"]["model"] == "test-model"
     assert query_call["body"]["messages"][0] == {"role": "system", "content": QUERY_AGENT_PROMPT}
     assert query_call["body"]["response_format"] == {"type": "json_object"}
+    # Without an explicit limit the provider's default applies, which cut real forecasts off.
+    assert query_call["body"]["max_tokens"] == upstream.calls[2]["body"]["max_tokens"] == 8000
     query_data = json.loads(query_call["body"]["messages"][1]["content"])
     assert query_data == {
         "sign": "Scorpio",
         "signKind": "rising",
         "month": {"firstDate": "2026-11-01", "lastDate": "2026-11-30", "label": "November 2026"},
-        "focusTopics": ["careerTransition", "financialPlanning"],
+        "focusAreas": ["Career & Work", "Money & Resources"],
     }
 
     search = upstream.calls[1]["body"]
@@ -303,7 +303,7 @@ async def test_two_nebius_calls_bracket_exactly_one_tavily_call_in_order():
     assert out["sources"][-1]["id"] == "web-search"
 
     assert len(out["result"]["events"]) == 1
-    assert "BEGIN:VCALENDAR" in out["result"]["ics_content"]
+    assert "BEGIN:VCALENDAR" in out["result"]["icsContent"]
     assert re.match(UUID_PATTERN, out["profileId"])
 
 
@@ -330,16 +330,16 @@ async def test_concurrent_same_profile_id_pipelines_each_use_their_own_snapshot(
         user = json.loads(body["messages"][1]["content"])
         day = user["month"]["firstDate"][:8] + "05"
         return valid_forecast(
-            events=[valid_event(date=day, topics=[user["person"]["focusTopics"][0]])]
+            events=[valid_event(date=day, lifeAreas=[user["person"]["focusAreas"][0]])]
         )
 
     upstream = Upstream(responder=respond)
     deps = make_deps(upstream)
     shared_id = str(uuid.uuid4())
-    december = {**VALID_PROFILE, "targetMonth": "December 2026", "priorities": ["datingRomance"]}
+    december = profile_model(targetMonth="December 2026", focusAreas=["love"])
 
     out_a, out_b = await asyncio.gather(
-        run_forecast_pipeline(VALID_PROFILE, None, deps, lambda s: None, shared_id),
+        run_forecast_pipeline(profile_model(), None, deps, lambda s: None, shared_id),
         run_forecast_pipeline(december, None, deps, lambda s: None, shared_id),
     )
     assert out_a["profileId"] == out_b["profileId"] == shared_id
@@ -352,9 +352,9 @@ async def test_concurrent_same_profile_id_pipelines_each_use_their_own_snapshot(
         if "nebius" in call["url"] and call["body"]["messages"][0]["content"] == QUERY_AGENT_PROMPT
     ]
     assert sorted(q["month"]["firstDate"] for q in query_payloads) == ["2026-11-01", "2026-12-01"]
-    assert sorted(q["focusTopics"][0] for q in query_payloads) == [
-        "careerTransition",
-        "datingRomance",
+    assert sorted(q["focusAreas"][0] for q in query_payloads) == [
+        "Career & Work",
+        "Love & Relationships",
     ]
     assert [p.name for p in profile_files(deps)] == [f"{shared_id}.json"]
 
@@ -367,7 +367,7 @@ async def test_concurrent_same_profile_id_pipelines_each_use_their_own_snapshot(
         [["not", "an", "object"]],
         [
             {"query": "ok"},
-            valid_forecast(events=[valid_event(source_urls=["https://fake.example/"])]),
+            valid_forecast(events=[valid_event(sourceUrls=["https://fake.example/"])]),
         ],
         [{"query": "ok"}, valid_forecast(events=[valid_event(date="2027-11-05")])],
         [{"query": "ok"}, "just text"],
@@ -384,8 +384,8 @@ async def test_no_evidence_at_all_gives_an_honest_empty_result_without_a_forecas
     out = await run(upstream)
     assert upstream.services == ["nebius", "tavily"]
     assert out["result"]["events"] == []
-    assert "No forecast for November 2026" in out["result"]["overall_theme"]
-    assert "END:VCALENDAR" in out["result"]["ics_content"]
+    assert "No forecast for November 2026" in out["result"]["theme"]
+    assert "END:VCALENDAR" in out["result"]["icsContent"]
     assert out["evidence"] == {"mode": "web", "gap": True}
 
 
@@ -414,14 +414,14 @@ async def test_malformed_upstream_bodies_are_gateway_errors():
         deps = make_deps()
         deps.http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
         with pytest.raises(PipelineError) as error:
-            await run_forecast_pipeline(VALID_PROFILE, None, deps, lambda s: None)
+            await run_forecast_pipeline(profile_model(), None, deps, lambda s: None)
         assert error.value.status == 502
 
 
 async def test_missing_config_fails_after_the_profile_is_saved():
     deps = make_deps(env={})
     with pytest.raises(PipelineError) as error:
-        await run_forecast_pipeline(VALID_PROFILE, None, deps, lambda s: None)
+        await run_forecast_pipeline(profile_model(), None, deps, lambda s: None)
     assert error.value.status == 503
     assert "NEBIUS_API_KEY" in error.value.message
     assert len(profile_files(deps)) == 1
@@ -458,11 +458,7 @@ def test_load_allowed_hosts_defaults_to_localhost_and_honours_override():
 
 async def test_an_unparseable_or_cut_off_answer_is_asked_for_once_more():
     answers = [
-        {
-            "choices": [
-                {"message": {"content": '{"overall_theme": "cut'}, "finish_reason": "length"}
-            ]
-        },
+        {"choices": [{"message": {"content": '{"theme": "cut'}, "finish_reason": "length"}]},
         {"choices": [{"message": {"content": json.dumps(cited_forecast(CAFE_URL))}}]},
     ]
 
@@ -481,10 +477,41 @@ async def test_an_unparseable_or_cut_off_answer_is_asked_for_once_more():
         return upstream, deps
 
     upstream, deps = scripted(answers)
-    out = await run_forecast_pipeline(VALID_PROFILE, None, deps, lambda s: None)
+    out = await run_forecast_pipeline(profile_model(), None, deps, lambda s: None)
     assert len(upstream.calls) == 2 and len(out["result"]["events"]) == 1
 
     upstream, deps = scripted(answers[:1])
     with pytest.raises(PipelineError, match="ran out of output tokens") as error:
-        await run_forecast_pipeline(VALID_PROFILE, None, deps, lambda s: None)
+        await run_forecast_pipeline(profile_model(), None, deps, lambda s: None)
     assert error.value.status == 502 and len(upstream.calls) == 2
+
+
+async def test_events_get_ids_and_a_personal_note_only_with_a_life_context():
+    noted = valid_forecast(
+        events=[valid_event(sourceUrls=[CAFE_URL], personalNote="Prepare for your interview.")]
+    )
+
+    async def events_for(**profile):
+        upstream = Upstream(pages=source_pages(), nebius_outputs=[noted])
+        return (await run(upstream, profile={**VALID_PROFILE, **profile}))["result"]
+
+    personal = await events_for(lifeContext=LIFE_CONTEXT)
+    assert personal["events"][0]["personalNote"] == "Prepare for your interview."
+    assert "For you: Prepare for your interview." in personal["icsContent"].replace("\r\n ", "")
+    assert set(personal["events"][0]) == {
+        "id",
+        "date",
+        "title",
+        "type",
+        "lifeAreas",
+        "summary",
+        "personalNote",
+        "sourceUrls",
+    }
+
+    for profile in ({}, {"lifeContext": {"goals": " "}}, {"mode": "general", "sunSign": "Scorpio"}):
+        result = await events_for(**profile)
+        assert "personalNote" not in result["events"][0], profile
+        assert "interview" not in result["icsContent"]
+        assert result["events"][0]["id"] == personal["events"][0]["id"]
+        assert f"UID:{result['events'][0]['id']}@moroscope" in result["icsContent"]

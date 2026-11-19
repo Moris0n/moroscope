@@ -10,13 +10,11 @@ import {
   Clock,
 } from 'lucide-react';
 import {
-  ActivityCategory,
-  LifePriority,
+  LifeArea,
   UserProfile,
   ZodiacSign,
 } from '../types/astrology';
 import {
-  CATEGORY_METADATA,
   ZODIAC_METADATA,
   ZODIAC_SIGNS,
   getEffectiveChartSign,
@@ -31,8 +29,8 @@ import { BirthPlaceSearch } from './BirthPlaceSearch';
 import { LifeContextForm } from './LifeContextForm';
 import { SignPicker } from './SignPicker';
 import {
-  LIFE_PRIORITIES,
-  PRIORITY_LABELS,
+  LIFE_AREAS,
+  LIFE_AREA_LABELS,
   parseMonthRange,
 } from '../utils/forecastShared';
 
@@ -48,17 +46,6 @@ interface NatalProfilePanelProps {
   onRemovePersonalDetails: () => void;
 }
 
-const ALL_CATEGORIES: ActivityCategory[] = [
-  'career',
-  'finance',
-  'social',
-  'hobbies',
-  'wellness',
-  'strategic',
-  'mind',
-  'rest',
-];
-
 export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
   profile,
   onUpdateProfile,
@@ -73,13 +60,13 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
   const [showBackendSettings, setShowBackendSettings] = useState(false);
   const targetMonthValid = !!parseMonthRange(profile.targetMonth);
 
-  const togglePriority = (p: LifePriority) => {
-    const exists = profile.priorities.includes(p);
+  const toggleFocusArea = (area: LifeArea) => {
+    const exists = profile.focusAreas.includes(area);
     onUpdateProfile({
       ...profile,
-      priorities: exists
-        ? profile.priorities.filter((x) => x !== p)
-        : [...profile.priorities, p],
+      focusAreas: exists
+        ? profile.focusAreas.filter((x) => x !== area)
+        : [...profile.focusAreas, area],
     });
   };
 
@@ -126,15 +113,6 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
         )}
       </p>
     ) : null;
-
-  const toggleCategory = (cat: ActivityCategory) => {
-    const exists = profile.activeCategories.includes(cat);
-    if (exists && profile.activeCategories.length <= 1) return;
-    const nextCats = exists
-      ? profile.activeCategories.filter((c) => c !== cat)
-      : [...profile.activeCategories, cat];
-    onUpdateProfile({ ...profile, activeCategories: nextCats });
-  };
 
   const handleAutoDetectTimezone = () => {
     const detected = detectLocalTimezone();
@@ -586,63 +564,6 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
             </button>
           </div>
         </div>
-
-        {/* Activity Category Personalization */}
-        <div className="mt-6 pt-5 border-t border-slate-800/80">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-100">
-                Prioritized Daily Activity Categories
-              </h3>
-              <p className="text-xs text-slate-400">
-                Select which life domains should be correlated into your daily schedule and caution alerts.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                onUpdateProfile({
-                  ...profile,
-                  activeCategories: ALL_CATEGORIES,
-                })
-              }
-              className="text-xs text-amber-300 hover:underline cursor-pointer"
-            >
-              Enable All 8 Domains
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-            {ALL_CATEGORIES.map((cat) => {
-              const meta = CATEGORY_METADATA[cat];
-              const isSelected = profile.activeCategories.includes(cat);
-              return (
-                <button
-                  type="button"
-                  key={cat}
-                  onClick={() => toggleCategory(cat)}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-[#080B14] border-amber-400/50 text-slate-100'
-                      : 'bg-[#080B14]/40 border-slate-800/70 text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-xs font-semibold">
-                    <span className={isSelected ? meta.colorClass : 'text-slate-400'}>
-                      {meta.shortLabel}
-                    </span>
-                    <span className="font-mono text-[10px]">
-                      {isSelected ? 'ACTIVE' : 'OFF'}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">
-                    {meta.description}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
       </div>
 
       <div className="rounded-2xl bg-[#10172A] border border-slate-800/80 p-5 sm:p-6">
@@ -679,7 +600,7 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
             Monthly forecast settings
           </div>
           <h3 className="text-base font-semibold text-slate-100 mt-1">
-            Target Month, Life Focus &amp; Backend Connection
+            Target Month, Focus Areas &amp; Backend Connection
           </h3>
         </div>
 
@@ -759,20 +680,21 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
 
         <div className="mt-5 pt-5 border-t border-slate-800/80">
           <h4 className="text-sm font-semibold text-slate-100">
-            Life Focus Priorities
+            Focus Areas
           </h4>
           <p className="text-xs text-slate-400 mt-0.5">
-            Monthly forecast events are tagged to these domains — they drive the
-            topic rows of the monthly heatmap.
+            The life areas your forecast concentrates on, most important first in the
+            order you pick them. They are also the rows of the month map. Pick none to
+            cover all ten.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {LIFE_PRIORITIES.map((p) => {
-              const isSelected = profile.priorities.includes(p);
+            {LIFE_AREAS.map((p) => {
+              const isSelected = profile.focusAreas.includes(p);
               return (
                 <button
                   type="button"
                   key={p}
-                  onClick={() => togglePriority(p)}
+                  onClick={() => toggleFocusArea(p)}
                   aria-pressed={isSelected}
                   className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${
                     isSelected
@@ -780,7 +702,7 @@ export const NatalProfilePanel: React.FC<NatalProfilePanelProps> = ({
                       : 'bg-[#080B14] border-slate-800 text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  {PRIORITY_LABELS[p]}
+                  {LIFE_AREA_LABELS[p]}
                 </button>
               );
             })}

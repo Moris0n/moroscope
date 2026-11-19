@@ -65,7 +65,7 @@ async def test_post_profiles_rejects_bad_ids_bad_profiles_and_bad_bodies():
 
         invalid = await client.post("/api/profiles", json={"profile": {"targetMonth": "x"}})
         assert invalid.status_code == 400
-        assert "name must be" in invalid.json()["error"]
+        assert "profile.name: Field required" in invalid.json()["error"]
 
         assert (await client.post("/api/profiles", content=b"{not json")).status_code == 400
         assert (await client.post("/api/profiles", json=[1, 2])).status_code == 400
@@ -118,7 +118,7 @@ async def test_json_response_returns_result_and_profile_id():
     data = response.json()
     assert re.match(UUID_PATTERN, data["profileId"])
     assert len(data["result"]["events"]) == 1
-    assert "BEGIN:VCALENDAR" in data["result"]["ics_content"]
+    assert "BEGIN:VCALENDAR" in data["result"]["icsContent"]
     assert upstream.services == ["nebius", "tavily", "nebius"]
     assert data["evidence"] == {"mode": "web", "gap": False}
     assert [s["status"] for s in data["sources"]] == ["failed"] * 5 + ["used"]
@@ -127,11 +127,11 @@ async def test_json_response_returns_result_and_profile_id():
 async def test_synthesize_reads_the_chosen_sources_and_reports_on_each():
     upstream = Upstream(
         pages=source_pages(),
-        nebius_outputs=[valid_forecast(events=[valid_event(source_urls=[CAFE_URL])])],
+        nebius_outputs=[valid_forecast(events=[valid_event(sourceUrls=[CAFE_URL])])],
     )
     general = {"mode": "general", "sunSign": "Scorpio", "targetMonth": "November 2026"}
     body = {
-        "profile": {**general, "priorities": []},
+        "profile": general,
         "sources": {"disabledCurated": ["rux-youtube", "astrology-zone", "no-such-source"]},
     }
     async with api_client(make_deps(upstream)) as client:

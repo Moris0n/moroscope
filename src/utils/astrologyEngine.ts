@@ -769,10 +769,9 @@ export function generateWeeklyForecasts(
       },
     ];
 
-    // Filter to user's active categories (always keeping finance caution if selected or if high priority)
-    const filteredActivities = allDayActivities
-      .filter((a) => profile.activeCategories.includes(a.category))
-      .sort((a, b) => a.localStartHour - b.localStartHour);
+    const filteredActivities = [...allDayActivities].sort(
+      (a, b) => a.localStartHour - b.localStartHour
+    );
 
     const wakingHours = hours.filter((h) => h.hourLocal >= 8 && h.hourLocal <= 21);
     const overallScore = Math.round(

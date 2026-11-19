@@ -1,38 +1,39 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ForecastResult,
-  LifePriority,
+  LifeArea,
 } from '../types/astrology';
 import {
-  LIFE_PRIORITIES,
-  PRIORITY_LABELS,
+  EVENT_TYPE_LABELS,
+  LIFE_AREAS,
+  LIFE_AREA_LABELS,
   parseMonthRange,
 } from '../utils/forecastShared';
 import {
   buildMonthlyHeatmap,
-  impactBadgeClasses,
+  eventTypeBadgeClasses,
 } from '../utils/forecastHelpers';
 
 interface TransitHeatmapMatrixProps {
   result: ForecastResult | null;
   targetMonth: string;
-  priorities: LifePriority[];
+  areas: LifeArea[]; // the chosen focus areas; none means all of them
 }
 
 interface SelectedCell {
-  priority: LifePriority;
+  area: LifeArea;
   date: string;
 }
 
 export const TransitHeatmapMatrix: React.FC<TransitHeatmapMatrixProps> = ({
   result,
   targetMonth,
-  priorities,
+  areas,
 }) => {
   const [selected, setSelected] = useState<SelectedCell | null>(null);
 
   const range = useMemo(() => parseMonthRange(targetMonth), [targetMonth]);
-  const rows = priorities.length > 0 ? priorities : LIFE_PRIORITIES;
+  const rows = areas.length > 0 ? areas : LIFE_AREAS;
   const matrix = useMemo(
     () =>
       range && result ? buildMonthlyHeatmap(result.events, range, rows) : null,
@@ -41,7 +42,7 @@ export const TransitHeatmapMatrix: React.FC<TransitHeatmapMatrixProps> = ({
 
   useEffect(() => {
     setSelected(null);
-  }, [result, targetMonth, priorities]);
+  }, [result, targetMonth, areas]);
 
   const dayHeaders = range
     ? Array.from({ length: range.daysInMonth }, (_, i) => i + 1)
@@ -49,7 +50,7 @@ export const TransitHeatmapMatrix: React.FC<TransitHeatmapMatrixProps> = ({
 
   const selectedCell = useMemo(() => {
     if (!selected || !matrix) return null;
-    const rIdx = rows.indexOf(selected.priority);
+    const rIdx = rows.indexOf(selected.area);
     if (rIdx < 0) return null;
     return (
       matrix[rIdx].find((c) => c.date === selected.date) || null
@@ -61,27 +62,27 @@ export const TransitHeatmapMatrix: React.FC<TransitHeatmapMatrixProps> = ({
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
         <div>
           <div className="text-xs text-slate-400">
-            <span>Monthly Day-by-Topic Transit Matrix</span>
+            <span>Month map: life areas by day</span>
             <span className="mx-2" aria-hidden="true">·</span>
             <span className="font-mono text-amber-300">{targetMonth}</span>
           </div>
           <h2 className="text-lg sm:text-xl font-semibold text-slate-100 mt-1">
-            Sourced Monthly Event Heatmap
+            Sourced Events by Life Area
           </h2>
         </div>
 
         <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400">
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-sm bg-emerald-500/60 inline-block" />
-            Opportunity
+            {EVENT_TYPE_LABELS.goodTime}
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-sm bg-amber-500/60 inline-block" />
-            Caution
+            {EVENT_TYPE_LABELS.caution}
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-sm bg-violet-500/60 inline-block" />
-            Milestone
+            {EVENT_TYPE_LABELS.keyDate}
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-sm bg-gradient-to-br from-emerald-500/40 via-amber-500/40 to-violet-500/40 inline-block" />
@@ -120,7 +121,7 @@ export const TransitHeatmapMatrix: React.FC<TransitHeatmapMatrixProps> = ({
                 }}
               >
                 <div className="text-[11px] font-mono text-slate-500">
-                  Topic / Day
+                  Life area / Day
                 </div>
                 {dayHeaders.map((d) => (
                   <div
@@ -133,51 +134,51 @@ export const TransitHeatmapMatrix: React.FC<TransitHeatmapMatrixProps> = ({
               </div>
 
               <div className="space-y-1.5">
-                {priorities.length === 0 && (
+                {areas.length === 0 && (
                   <p className="text-xs text-slate-500 py-2">
-                    No life priorities selected — showing all five topic rows.
+                    No focus areas chosen — showing all ten life areas.
                   </p>
                 )}
                 {matrix.map((row, rIdx) => {
-                  const priority = rows[rIdx];
+                  const area = rows[rIdx];
                   return (
                     <div
-                      key={priority}
+                      key={area}
                       className="grid gap-1 items-center"
                       style={{
                         gridTemplateColumns: `150px repeat(${range!.daysInMonth}, minmax(0,1fr))`,
                       }}
                     >
                       <div className="text-xs font-medium text-slate-300 truncate pr-2">
-                        {PRIORITY_LABELS[priority]}
+                        {LIFE_AREA_LABELS[area]}
                       </div>
                       {row.map((cell) => {
                         const isSelected =
-                          selected?.priority === priority &&
+                          selected?.area === area &&
                           selected.date === cell.date;
                         const classes =
-                          cell.impacts.size === 0
+                          cell.types.size === 0
                             ? 'bg-[#0B0F1C] text-slate-600'
-                            : cell.impacts.size > 1
+                            : cell.types.size > 1
                             ? 'bg-gradient-to-br from-emerald-500/40 via-amber-500/40 to-violet-500/40 text-white font-semibold'
-                            : cell.impacts.has('Opportunity')
+                            : cell.types.has('goodTime')
                             ? 'bg-emerald-500/60 text-emerald-50'
-                            : cell.impacts.has('Caution')
+                            : cell.types.has('caution')
                             ? 'bg-amber-500/60 text-amber-50'
                             : 'bg-violet-500/60 text-violet-50';
                         const impactDesc =
-                          cell.impacts.size === 0
+                          cell.types.size === 0
                             ? 'No sourced event'
-                            : cell.impacts.size > 1
-                            ? `Mixed: ${[...cell.impacts].join(' & ')}`
-                            : [...cell.impacts][0];
+                            : cell.types.size > 1
+                            ? `Mixed: ${[...cell.types].map((t) => EVENT_TYPE_LABELS[t]).join(' & ')}`
+                            : EVENT_TYPE_LABELS[[...cell.types][0]];
                         return (
                           <button
                             key={cell.date}
                             onClick={() =>
-                              setSelected({ priority, date: cell.date })
+                              setSelected({ area, date: cell.date })
                             }
-                            aria-label={`${PRIORITY_LABELS[priority]} on ${cell.date}: ${impactDesc}`}
+                            aria-label={`${LIFE_AREA_LABELS[area]} on ${cell.date}: ${impactDesc}`}
                             title={`${cell.date} — ${impactDesc}`}
                             className={`h-8 rounded-md font-mono text-[10px] tabular-nums flex items-center justify-center transition-transform cursor-pointer ${classes} ${
                               isSelected
@@ -185,7 +186,7 @@ export const TransitHeatmapMatrix: React.FC<TransitHeatmapMatrixProps> = ({
                                 : 'hover:opacity-90'
                             }`}
                           >
-                            {cell.impacts.size > 1 ? '◆' : ''}
+                            {cell.types.size > 1 ? '◆' : ''}
                           </button>
                         );
                       })}
@@ -201,27 +202,27 @@ export const TransitHeatmapMatrix: React.FC<TransitHeatmapMatrixProps> = ({
               <div className="space-y-3">
                 <div className="text-xs text-slate-400">
                   <span className="text-amber-300 font-medium">
-                    {PRIORITY_LABELS[selected.priority]}
+                    {LIFE_AREA_LABELS[selected.area]}
                   </span>
                   <span className="mx-2" aria-hidden="true">·</span>
                   <span className="font-mono">{selected.date}</span>
                 </div>
-                {selectedCell.events.map((ev, i) => (
+                {selectedCell.events.map((ev) => (
                   <div
-                    key={`${ev.date}-${i}`}
+                    key={ev.id}
                     className="p-3 rounded-xl bg-[#080B14] border border-slate-800/90"
                   >
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                       <span
-                        className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${impactBadgeClasses(
-                          ev.impact_type
+                        className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${eventTypeBadgeClasses(
+                          ev.type
                         )}`}
                       >
-                        {ev.impact_type}
+                        {EVENT_TYPE_LABELS[ev.type]}
                       </span>
                       <span className="font-mono text-slate-400">
                         {ev.date}
-                        {ev.end_date ? ` → ${ev.end_date}` : ''}
+                        {ev.endDate ? ` → ${ev.endDate}` : ''}
                       </span>
                     </div>
                     <h3 className="text-sm font-semibold text-slate-100 mt-1.5">
@@ -230,8 +231,14 @@ export const TransitHeatmapMatrix: React.FC<TransitHeatmapMatrixProps> = ({
                     <p className="text-xs text-slate-300 mt-1 leading-relaxed">
                       {ev.summary}
                     </p>
+                    {ev.personalNote && (
+                      <p className="text-xs text-slate-200 mt-1.5 leading-relaxed">
+                        <span className="text-amber-300 font-medium">For you: </span>
+                        {ev.personalNote}
+                      </p>
+                    )}
                     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                      {ev.source_urls.map((url) => (
+                      {ev.sourceUrls.map((url) => (
                         <a
                           key={url}
                           href={url}
@@ -249,7 +256,7 @@ export const TransitHeatmapMatrix: React.FC<TransitHeatmapMatrixProps> = ({
             ) : selected ? (
               <p className="text-xs text-slate-400">
                 <span className="text-amber-300 font-medium">
-                  {PRIORITY_LABELS[selected.priority]}
+                  {LIFE_AREA_LABELS[selected.area]}
                 </span>
                 <span className="mx-2" aria-hidden="true">·</span>
                 <span className="font-mono">{selected.date}</span> — No
@@ -258,7 +265,7 @@ export const TransitHeatmapMatrix: React.FC<TransitHeatmapMatrixProps> = ({
             ) : (
               <p className="text-xs text-slate-500">
                 Select a day cell to inspect the source-backed events covering
-                it. Multi-impact days are marked ◆.
+                it. Days with more than one kind of event are marked ◆.
               </p>
             )}
           </div>

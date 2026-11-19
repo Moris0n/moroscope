@@ -15,7 +15,8 @@ from skyfield.framelib import ecliptic_frame
 from skyfield.nutationlib import mean_obliquity
 
 from .config import PipelineError
-from .validation import ZODIAC_ORDER, ChartRequest
+from .models import ChartRequest
+from .validation import ZODIAC_ORDER
 
 DEFAULT_EPHEMERIS_PATH = Path(__file__).resolve().parent / "resources" / "de421.bsp"
 

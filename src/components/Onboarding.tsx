@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { ArrowLeft, ArrowRight, Sparkles, UserCheck } from 'lucide-react';
-import { LifePriority, UserProfile, ZodiacSign } from '../types/astrology';
+import { LifeArea, UserProfile, ZodiacSign } from '../types/astrology';
 import { useNatalChart } from '../hooks/useNatalChart';
 import {
-  LIFE_PRIORITIES,
-  PRIORITY_LABELS,
+  LIFE_AREAS,
+  LIFE_AREA_LABELS,
   isValidBirthTime,
   parseIsoDate,
   toGeneralProfile,
@@ -66,12 +66,12 @@ export const Onboarding: React.FC<OnboardingProps> = ({
     else if (step === 'focus') setStep('life');
   };
 
-  const togglePriority = (priority: LifePriority) =>
+  const toggleFocusArea = (area: LifeArea) =>
     setDraft((prev) => ({
       ...prev,
-      priorities: prev.priorities.includes(priority)
-        ? prev.priorities.filter((p) => p !== priority)
-        : [...prev.priorities, priority],
+      focusAreas: prev.focusAreas.includes(area)
+        ? prev.focusAreas.filter((a) => a !== area)
+        : [...prev.focusAreas, area],
     }));
 
   const personalIndex = PERSONAL_STEPS.indexOf(step);
@@ -347,24 +347,25 @@ export const Onboarding: React.FC<OnboardingProps> = ({
           <div className="mt-6">
             <h1 className="text-2xl font-bold text-slate-100">What matters most this month?</h1>
             <p className="text-sm text-slate-300 mt-2 leading-relaxed">
-              Pick the topics your forecast should concentrate on. Pick none to cover all of them.
+              Pick the life areas your forecast should concentrate on, most important first.
+              Pick none to cover all of them.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
-              {LIFE_PRIORITIES.map((priority) => {
-                const selected = draft.priorities.includes(priority);
+              {LIFE_AREAS.map((priority) => {
+                const selected = draft.focusAreas.includes(priority);
                 return (
                   <button
                     type="button"
                     key={priority}
                     aria-pressed={selected}
-                    onClick={() => togglePriority(priority)}
+                    onClick={() => toggleFocusArea(priority)}
                     className={`min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${
                       selected
                         ? 'bg-amber-500/20 border-amber-400/50 text-amber-200'
                         : 'bg-[#080B14] border-slate-800 text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    {PRIORITY_LABELS[priority]}
+                    {LIFE_AREA_LABELS[priority]}
                   </button>
                 );
               })}

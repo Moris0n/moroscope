@@ -17,6 +17,8 @@ export const STORAGE_KEYS = {
   // 'sources' held the placeholder list of the first prototype; it is no longer read.
   SOURCE_SETTINGS: storageKey('source_settings'),
   ONBOARDED: storageKey('onboarded'),
+  // The latest forecast per month (utils/forecastStore.ts). Holds personal notes.
+  FORECASTS: storageKey('forecasts'),
 };
 
 export function readStoredString({ key, legacyKey }: StorageKey): string | null {

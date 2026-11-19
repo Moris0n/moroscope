@@ -1,8 +1,8 @@
 import {
   ForecastEvidence,
+  EventType,
   ForecastResult,
-  ImpactType,
-  LifePriority,
+  LifeArea,
   SourceReport,
   TransitEvent,
 } from '../types/astrology';
@@ -78,13 +78,13 @@ export async function copyToClipboard(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
 }
 
-export function impactBadgeClasses(impact: ImpactType): string {
-  switch (impact) {
-    case 'Opportunity':
+export function eventTypeBadgeClasses(type: EventType): string {
+  switch (type) {
+    case 'goodTime':
       return 'bg-emerald-500/20 border border-emerald-400/50 text-emerald-200';
-    case 'Caution':
+    case 'caution':
       return 'bg-amber-500/20 border border-amber-400/50 text-amber-200';
-    case 'Milestone':
+    case 'keyDate':
       return 'bg-violet-500/20 border border-violet-400/50 text-violet-200';
     default:
       return 'bg-slate-700/40 border border-slate-600 text-slate-300';
@@ -94,30 +94,31 @@ export function impactBadgeClasses(impact: ImpactType): string {
 export interface HeatmapCell {
   date: string;
   day: number;
-  impacts: Set<ImpactType>;
+  types: Set<EventType>;
   events: TransitEvent[];
 }
 
+/** One row per life area, one cell per day, each with the events tagged with that area. */
 export function buildMonthlyHeatmap(
   events: TransitEvent[],
   range: MonthRange,
-  priorities: LifePriority[]
+  areas: LifeArea[]
 ): HeatmapCell[][] {
-  return priorities.map((priority) => {
+  return areas.map((area) => {
     const cells: HeatmapCell[] = [];
     for (let day = 1; day <= range.daysInMonth; day++) {
       const date = formatUtcDate(range.year, range.month, day);
-      const impacts = new Set<ImpactType>();
+      const types = new Set<EventType>();
       const matched: TransitEvent[] = [];
       for (const ev of events) {
-        if (!ev.topics.includes(priority)) continue;
-        const span = inclusiveDaySpan(ev.date, ev.end_date || ev.date);
+        if (!ev.lifeAreas.includes(area)) continue;
+        const span = inclusiveDaySpan(ev.date, ev.endDate || ev.date);
         if (span.includes(date)) {
-          impacts.add(ev.impact_type);
+          types.add(ev.type);
           matched.push(ev);
         }
       }
-      cells.push({ date, day, impacts, events: matched });
+      cells.push({ date, day, types, events: matched });
     }
     return cells;
   });

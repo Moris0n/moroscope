@@ -151,7 +151,7 @@ def watch_url(video_id: str, seconds: int = 0) -> str:
 
 
 def video_documents(video: Video, cues: list[Cue], target: Target) -> list[dict[str, str]]:
-    """The general introduction and the sign's chapter of a monthly video as two documents."""
+    """The sign's chapter of a monthly video. The general introduction before it is left out."""
     signs = sign_chapters(parse_chapters(video.description))
     source = video.channel or "YouTube"
     if target.sign not in signs:
@@ -161,18 +161,10 @@ def video_documents(video: Video, cues: list[Cue], target: Target) -> list[dict[
                 f"The video has no timestamp for {target.sign}, so its part cannot be found."
             )
         return [document(watch_url(video.id), source, video.title, whole)] if whole else []
-    documents = []
-    intro_end = min(start for start, _ in signs.values())
-    intro = slice_transcript(cues, 0, intro_end)
-    if intro:
-        title = f"{video.title} (general overview)"
-        documents.append(document(watch_url(video.id), source, title, intro))
     start, end = signs[target.sign]
     chapter = slice_transcript(cues, start, end)
-    if chapter:
-        title = f"{video.title} ({target.sign})"
-        documents.append(document(watch_url(video.id, start), source, title, chapter))
-    return documents
+    title = f"{video.title} ({target.sign})"
+    return [document(watch_url(video.id, start), source, title, chapter)] if chapter else []
 
 
 def default_fetch_transcript(video_id: str) -> list[Cue]:

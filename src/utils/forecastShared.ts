@@ -1,15 +1,15 @@
 import {
-  ActivityCategory,
   BirthPlace,
+  EventType,
   ForecastEvidence,
   ForecastResult,
   HealthFocus,
-  ImpactType,
   KidsStage,
+  LifeArea,
   LifeContext,
-  LifePriority,
   MoneyFocus,
   NatalChart,
+  ProfileRequest,
   RelationshipStatus,
   SourceReport,
   SourceSettings,
@@ -19,38 +19,38 @@ import {
   ZodiacSign,
 } from '../types/astrology';
 
-export const LIFE_PRIORITIES: LifePriority[] = [
-  'careerTransition',
-  'contractNegotiations',
-  'datingRomance',
-  'healthHabits',
-  'financialPlanning',
-];
-
-export const PRIORITY_LABELS: Record<LifePriority, string> = {
-  careerTransition: 'Career Transition',
-  contractNegotiations: 'Contract Negotiations',
-  datingRomance: 'Dating & Romance',
-  healthHabits: 'Health & Habits',
-  financialPlanning: 'Financial Planning',
+// The life areas in display order. The ids and labels match backend/app/models.py.
+export const LIFE_AREA_LABELS: Record<LifeArea, string> = {
+  career: 'Career & Work',
+  money: 'Money & Resources',
+  love: 'Love & Relationships',
+  family: 'Family & Home',
+  health: 'Health & Wellbeing',
+  community: 'Friends & Community',
+  communication: 'Communication & Contracts',
+  learning: 'Learning & Travel',
+  creativity: 'Creativity & Fun',
+  rest: 'Rest & Inner Life',
 };
 
-export const IMPACT_TYPES: ImpactType[] = [
-  'Opportunity',
-  'Caution',
-  'Milestone',
-];
+export const LIFE_AREAS = Object.keys(LIFE_AREA_LABELS) as LifeArea[];
 
-export const ACTIVITY_CATEGORIES: ActivityCategory[] = [
-  'career',
-  'social',
-  'hobbies',
-  'finance',
-  'wellness',
-  'mind',
-  'strategic',
-  'rest',
-];
+export const EVENT_TYPE_LABELS: Record<EventType, string> = {
+  keyDate: 'Key date',
+  goodTime: 'Good time',
+  caution: 'Be careful',
+};
+
+export const EVENT_TYPES = Object.keys(EVENT_TYPE_LABELS) as EventType[];
+
+// The five focus topics of profiles stored before the life areas existed.
+const LEGACY_PRIORITY_AREAS: Record<string, LifeArea> = {
+  careerTransition: 'career',
+  contractNegotiations: 'communication',
+  datingRomance: 'love',
+  healthHabits: 'health',
+  financialPlanning: 'money',
+};
 
 export const DEFAULT_BACKEND_URL = '';
 export const MAX_NAME_LENGTH = 120;
@@ -146,9 +146,31 @@ const ZODIAC_SET = new Set<string>([
   'Pisces',
 ]);
 
-const PRIORITY_SET = new Set<string>(LIFE_PRIORITIES);
-const IMPACT_SET = new Set<string>(IMPACT_TYPES);
-const CATEGORY_SET = new Set<string>(ACTIVITY_CATEGORIES);
+export const isZodiacSign = (value: unknown): value is ZodiacSign =>
+  ZODIAC_SET.has(value as string);
+
+const LIFE_AREA_SET = new Set<string>(LIFE_AREAS);
+const EVENT_TYPE_SET = new Set<string>(EVENT_TYPES);
+
+/** The known life areas in `input`, in its order, each once. */
+export function cleanLifeAreas(input: unknown): LifeArea[] {
+  if (!Array.isArray(input)) return [];
+  return [...new Set(input.filter((a) => LIFE_AREA_SET.has(a)))] as LifeArea[];
+}
+
+/**
+ * The focus areas of a stored profile. One from before the life areas existed has `priorities`
+ * (five topics) instead: each is carried over to the life area that replaced it.
+ */
+export function storedFocusAreas(saved: unknown, fallback: LifeArea[]): LifeArea[] {
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return [...fallback];
+  const src = saved as Record<string, unknown>;
+  if (Array.isArray(src.focusAreas)) return cleanLifeAreas(src.focusAreas);
+  if (Array.isArray(src.priorities)) {
+    return cleanLifeAreas(src.priorities.map((p) => LEGACY_PRIORITY_AREAS[p as string]));
+  }
+  return [...fallback];
+}
 
 export function defaultTargetMonth(now: Date = new Date()): string {
   return `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
@@ -271,24 +293,27 @@ export function isValidBirthTime(value: unknown): boolean {
 export function isValidForecastShape(input: unknown): input is ForecastResult {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
   const obj = input as Record<string, unknown>;
-  if (typeof obj.overall_theme !== 'string') return false;
-  if (typeof obj.ics_content !== 'string' || !obj.ics_content.includes('BEGIN:VCALENDAR'))
+  if (typeof obj.theme !== 'string') return false;
+  if (typeof obj.icsContent !== 'string' || !obj.icsContent.includes('BEGIN:VCALENDAR'))
     return false;
   if (!Array.isArray(obj.events)) return false;
+  const ids = new Set<string>();
   for (const ev of obj.events) {
     if (!ev || typeof ev !== 'object') return false;
     const e = ev as Record<string, unknown>;
+    if (typeof e.id !== 'string' || !e.id || ids.has(e.id)) return false;
+    ids.add(e.id);
     if (!parseIsoDate(e.date)) return false;
-    if (e.end_date !== undefined && !parseIsoDate(e.end_date)) return false;
+    if (e.endDate !== undefined && !parseIsoDate(e.endDate)) return false;
     if (typeof e.title !== 'string' || typeof e.summary !== 'string') return false;
-    if (!IMPACT_SET.has(e.impact_type as string)) return false;
+    if (e.personalNote !== undefined && typeof e.personalNote !== 'string') return false;
+    if (!EVENT_TYPE_SET.has(e.type as string)) return false;
     if (
-      !Array.isArray(e.topics) ||
-      !e.topics.every((t: unknown) => PRIORITY_SET.has(t as string))
+      !Array.isArray(e.lifeAreas) ||
+      !e.lifeAreas.every((a: unknown) => LIFE_AREA_SET.has(a as string))
     )
       return false;
-    if (!Array.isArray(e.source_urls) || !e.source_urls.every(isHttpUrl))
-      return false;
+    if (!Array.isArray(e.sourceUrls) || !e.sourceUrls.every(isHttpUrl)) return false;
   }
   return true;
 }
@@ -390,24 +415,39 @@ export function primarySign(profile: UserProfile): {
 
 /**
  * What is sent to the server for a profile. A general profile sends its sign, the month and the
- * focus topics and nothing else. The life context is included only when asked for (forecasts),
+ * focus areas and nothing else. The life context is included only when asked for (forecasts),
  * never when the profile is saved.
  */
 export function profileRequestBody(
   profile: UserProfile,
   options: { lifeContext: boolean } = { lifeContext: true }
-): Record<string, unknown> {
+): ProfileRequest {
   if (profile.mode === 'general') {
     return {
       mode: 'general',
       sunSign: profile.sunSign,
       targetMonth: profile.targetMonth,
-      priorities: profile.priorities,
+      focusAreas: profile.focusAreas,
     };
   }
-  const { backendUrl, chart, birthPlace, lifeContext, ...body } = profile;
-  const context = options.lifeContext ? cleanLifeContext(lifeContext) : {};
-  return Object.keys(context).length > 0 ? { ...body, lifeContext: context } : body;
+  const context = options.lifeContext ? cleanLifeContext(profile.lifeContext) : {};
+  return {
+    mode: 'personal',
+    name: profile.name,
+    birthDate: profile.birthDate,
+    birthTime: profile.birthTime,
+    hasExactTime: profile.hasExactTime,
+    birthLocation: profile.birthLocation,
+    birthTimezone: profile.birthTimezone,
+    operatingTimezone: profile.operatingTimezone,
+    sunSign: profile.sunSign,
+    moonSign: profile.moonSign,
+    ...(profile.risingSign ? { risingSign: profile.risingSign } : {}),
+    useRisingPrimary: profile.useRisingPrimary,
+    targetMonth: profile.targetMonth,
+    focusAreas: profile.focusAreas,
+    ...(Object.keys(context).length > 0 ? { lifeContext: context } : {}),
+  };
 }
 
 /** A general profile for `sign`: every personal detail of `profile` is dropped. */
@@ -589,20 +629,7 @@ export function mergeProfileWithDefaults(
   if (!parseMonthRange(merged.targetMonth)) {
     merged.targetMonth = defaults.targetMonth;
   }
-  if (!Array.isArray(merged.priorities)) {
-    merged.priorities = [...defaults.priorities];
-  } else {
-    merged.priorities = merged.priorities.filter((p) =>
-      PRIORITY_SET.has(p as string)
-    ) as LifePriority[];
-  }
-  if (
-    !Array.isArray(merged.activeCategories) ||
-    merged.activeCategories.length === 0 ||
-    !merged.activeCategories.every((c) => CATEGORY_SET.has(c))
-  ) {
-    merged.activeCategories = [...defaults.activeCategories];
-  }
+  merged.focusAreas = storedFocusAreas(saved, defaults.focusAreas);
   if (!isValidBackendUrl(merged.backendUrl)) {
     merged.backendUrl = defaults.backendUrl;
   }

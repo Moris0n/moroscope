@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
 
-from .validation import PRIORITY_LABELS
+from .models import EVENT_TYPE_LABELS, LIFE_AREA_LABELS, ForecastEvent
 
 CRLF = "\r\n"
 MAX_LINE_OCTETS = 75
@@ -20,16 +19,6 @@ def _escape_text(value: str) -> str:
         .replace("\r", "\\n")
         .replace("\n", "\\n")
     )
-
-
-def _fnv1a(value: str) -> str:
-    # Hashes UTF-16 code units so UIDs stay identical to the original TypeScript implementation.
-    data = value.encode("utf-16-le", "surrogatepass")
-    h = 0x811C9DC5
-    for i in range(0, len(data), 2):
-        h ^= data[i] | (data[i + 1] << 8)
-        h = (h * 0x01000193) & 0xFFFFFFFF
-    return f"{h:08x}"
 
 
 def fold_ics_line(line: str) -> str:
@@ -58,9 +47,7 @@ def _ics_date(iso_date: str) -> str:
     return iso_date.replace("-", "")
 
 
-def build_ics_calendar(
-    events: list[dict[str, Any]], month_key: str, now: datetime | None = None
-) -> str:
+def build_ics_calendar(events: list[ForecastEvent], now: datetime | None = None) -> str:
     """Build an all-day-event calendar. `end_date` on events is inclusive."""
     now = now or datetime.now(UTC)
     dtstamp = now.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -72,30 +59,26 @@ def build_ics_calendar(
         "METHOD:PUBLISH",
     ]
 
-    for index, ev in enumerate(events):
-        end_date = ev.get("end_date") or ""
-        exclusive_end = date.fromisoformat(end_date or ev["date"]) + timedelta(days=1)
-        uid_source = (
-            f"{month_key}|{index}|{ev['date']}|{end_date}|{ev['title']}|{ev['impact_type']}"
-        )
-        topic_labels = ", ".join(PRIORITY_LABELS.get(t, t) for t in ev["topics"])
+    for ev in events:
+        exclusive_end = date.fromisoformat(ev.end_date or ev.date) + timedelta(days=1)
+        areas = ", ".join(LIFE_AREA_LABELS[area] for area in ev.life_areas)
         description = "\n\n".join(
             part
             for part in (
-                ev["summary"],
-                f"Impact: {ev['impact_type']}",
-                f"Life focus: {topic_labels}" if topic_labels else "",
-                f"Sources: {' | '.join(ev['source_urls'])}" if ev["source_urls"] else "",
+                ev.summary,
+                f"For you: {ev.personal_note}" if ev.personal_note else "",
+                f"Life areas: {areas}",
+                f"Sources: {' | '.join(ev.source_urls)}",
             )
             if part
         )
         lines += [
             "BEGIN:VEVENT",
-            f"UID:{_fnv1a(uid_source)}-{index}@moroscope",
+            f"UID:{ev.id}@moroscope",
             f"DTSTAMP:{dtstamp}",
-            f"DTSTART;VALUE=DATE:{_ics_date(ev['date'])}",
+            f"DTSTART;VALUE=DATE:{_ics_date(ev.date)}",
             f"DTEND;VALUE=DATE:{_ics_date(exclusive_end.isoformat())}",
-            f"SUMMARY:{_escape_text(f'[{ev["impact_type"]}] {ev["title"]}')}",
+            f"SUMMARY:{_escape_text(f'[{EVENT_TYPE_LABELS[ev.type]}] {ev.title}')}",
             f"DESCRIPTION:{_escape_text(description)}",
             "END:VEVENT",
         ]

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Clipboard, Download } from 'lucide-react';
 import { StoredForecast } from '../hooks/useForecast';
-import { PRIORITY_LABELS } from '../utils/forecastShared';
+import { EVENT_TYPE_LABELS, LIFE_AREA_LABELS } from '../utils/forecastShared';
 import {
   copyToClipboard,
   downloadIcs,
-  impactBadgeClasses,
+  eventTypeBadgeClasses,
   sourceLabel,
 } from '../utils/forecastHelpers';
 
@@ -21,12 +21,13 @@ const EVIDENCE_NOTES = {
   web: 'The default sources had too little for this month, so the open web was searched as well.',
 } as const;
 
-const CopyJsonButton: React.FC<{ rawJson: string }> = ({ rawJson }) => {
+const CopyJsonButton: React.FC<{ forecast: StoredForecast }> = ({ forecast }) => {
   const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   const handleCopy = async () => {
     try {
-      await copyToClipboard(rawJson);
+      const { result, profileId, sources, evidence } = forecast;
+      await copyToClipboard(JSON.stringify({ result, profileId, sources, evidence }, null, 2));
       setStatus('copied');
     } catch {
       setStatus('failed');
@@ -53,11 +54,14 @@ const CopyJsonButton: React.FC<{ rawJson: string }> = ({ rawJson }) => {
 
 interface ForecastResultsProps {
   forecast: StoredForecast;
+  // What the forecast was made for ("Scorpio, personal") when the profile has changed since.
+  madeFor: string | null;
   onRetryWithDefaultSources: () => void;
 }
 
 export const ForecastResults: React.FC<ForecastResultsProps> = ({
   forecast,
+  madeFor,
   onRetryWithDefaultSources,
 }) => {
   const { sources, evidence } = forecast;
@@ -84,7 +88,7 @@ export const ForecastResults: React.FC<ForecastResultsProps> = ({
           <button
             onClick={() =>
               downloadIcs(
-                forecast.result.ics_content,
+                forecast.result.icsContent,
                 `moroscope-${forecast.targetMonth
                   .toLowerCase()
                   .replace(/\s+/g, '-')}.ics`
@@ -95,12 +99,19 @@ export const ForecastResults: React.FC<ForecastResultsProps> = ({
             <Download className="w-3.5 h-3.5" />
             <span>Download .ics Calendar</span>
           </button>
-          <CopyJsonButton rawJson={forecast.rawJson} />
+          <CopyJsonButton forecast={forecast} />
         </div>
       </div>
 
+      {madeFor && (
+        <p className="px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-400/30 text-xs text-amber-200">
+          This forecast was made for {madeFor}. Your profile has changed since: generate it
+          again to bring it up to date.
+        </p>
+      )}
+
       <p className="text-sm sm:text-base text-slate-300 leading-relaxed max-w-4xl">
-        {forecast.result.overall_theme}
+        {forecast.result.theme}
       </p>
 
       {forecast.result.events.length === 0 ? (
@@ -124,29 +135,29 @@ export const ForecastResults: React.FC<ForecastResultsProps> = ({
         </div>
       ) : (
         <ol className="space-y-3">
-          {forecast.result.events.map((ev, idx) => (
+          {forecast.result.events.map((ev) => (
             <li
-              key={`${ev.date}-${idx}`}
+              key={ev.id}
               className="p-4 rounded-xl bg-[#080B14] border border-slate-800/90"
             >
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                 <span className="font-mono text-amber-300 font-medium">
                   {ev.date}
-                  {ev.end_date ? ` → ${ev.end_date}` : ''}
+                  {ev.endDate ? ` → ${ev.endDate}` : ''}
                 </span>
                 <span
-                  className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${impactBadgeClasses(
-                    ev.impact_type
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${eventTypeBadgeClasses(
+                    ev.type
                   )}`}
                 >
-                  {ev.impact_type}
+                  {EVENT_TYPE_LABELS[ev.type]}
                 </span>
-                {ev.topics.map((t) => (
+                {ev.lifeAreas.map((area) => (
                   <span
-                    key={t}
-                    className="text-[11px] text-slate-400"
+                    key={area}
+                    className="px-2 py-0.5 rounded-md bg-slate-800/70 text-[11px] text-slate-300"
                   >
-                    {PRIORITY_LABELS[t]}
+                    {LIFE_AREA_LABELS[area]}
                   </span>
                 ))}
               </div>
@@ -156,8 +167,14 @@ export const ForecastResults: React.FC<ForecastResultsProps> = ({
               <p className="text-sm text-slate-300 mt-1 leading-relaxed">
                 {ev.summary}
               </p>
+              {ev.personalNote && (
+                <p className="text-sm text-slate-200 mt-2 pl-3 border-l-2 border-amber-400/60 leading-relaxed">
+                  <span className="text-amber-300 font-medium">For you: </span>
+                  {ev.personalNote}
+                </p>
+              )}
               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                {ev.source_urls.map((url) => (
+                {ev.sourceUrls.map((url) => (
                   <a
                     key={url}
                     href={url}
