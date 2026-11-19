@@ -83,7 +83,7 @@ Astrology is framed as interpretive planning guidance, never as prediction, fina
 2. Otherwise: read the curated sources directly (each reader checks month and year and cuts out the sign). If fewer than two have something, fall back to open web search.
 3. Exclusive mode with no usable evidence: show an evidence-gap message with a one-click "also use default sources" retry. The search is never broadened silently.
 
-Every event cites at least one retrieved URL (the existing guarantee stays). Per-source agreement is shown in the event detail.
+Every event cites at least one retrieved URL, and its date and wording are confirmed against that source's text in code before it is shown. Per-source agreement is shown in the event detail.
 
 ### F3. Life areas
 
@@ -133,7 +133,7 @@ The month picker defaults to the current or next month.
 
 After the month, the user looks back: a short questionnaire or reflection on what really took place, per event ("happened / didn't") and overall.
 
-- Reviews refer to events by their id (assigned by the server since Phase 3a). An id changes when a forecast is regenerated and the model words the title differently; the feature has to decide what happens to a review then.
+- Reviews refer to events by their id (assigned by the server since Phase 3a). An id is built from the source, the dates and the quote of the extracted event, so it survives regeneration while the extraction is cached; it changes when the source text is extracted again with a different quote. The feature has to decide what happens to a review then.
 - Stored on the device only, inside the month's forecast record (the record is versioned for this). A month with a review is never pruned.
 - Needs an "export my data" / "import" file: a forecast can be regenerated, a review cannot. The same file is the migration path into a database once accounts exist.
 - A review goes to the AI service only with the same kind of consent as the life context.
@@ -143,7 +143,7 @@ After the month, the user looks back: a short questionnaire or reflection on wha
 The server computes the month's sky events with Skyfield: new and full moons, sign ingresses, retrograde stations, void-of-course Moon.
 
 Uses:
-- cross-check the dates the LLM returns
+- cross-check the dates of the extracted events (their `planets` and `aspect` are kept for this)
 - add "Sky event" items
 - rebuild the weekly energy chart and hourly view on real transits
 
@@ -186,13 +186,15 @@ Login, server-side encrypted profiles, multi-device sync, forecast history.
 - ICS generation: a port of `ics.ts`, or the `icalendar` library.
 - Tests: pytest + respx. Tooling: uv, ruff, mypy or pyright.
 
-**Forecast pipeline**
-1. Validate the profile (including life context) and the source configuration.
-2. Query agent: 1 to 3 search queries (sign, month and year, focus areas; no personal data).
-3. Tavily search using the F2 domain rules.
-4. Forecast agent: events tagged with life areas, event type and a personal note.
-5. Strict validation: dates within the month, citations limited to retrieved URLs, allowed enum values.
-6. Deterministic `.ics`.
+**Forecast pipeline** (as built)
+1. Validate the profile (including life context) and the source configuration; save the profile snapshot without the life context.
+2. Read the sources using the F2 rules. Only in the web-search fallback: a query agent writes one search query (sign, month and year, focus areas; no personal data) for Tavily.
+3. Extractor: one LLM call per source document, with the month, the sign and that document. Nothing about the user, so the answer is cached. It returns dated events, each with a verbatim quote, the source's tone, life areas and, when the source says so, planets, aspect, house and sign.
+4. Verification in code, per event: the quote is in the document and names the day; the dates lie within the month. A failed check drops that event and is counted per source.
+5. Priorities in code: the house table, life context → life areas and houses, ranking (hand-picked focus areas, then derived ones, then the rest; never a filter) and a templated narrative that says only what the user stated.
+6. Synthesizer: one LLM call with the verified events (no source text), the narrative and the user's dated plans. It refers to events by id and writes the theme and, per event, a title, a summary and a personal note. It can group events from several sources.
+7. Assembly in code: ids must exist and are used once; of a group, the members that have the same dates are merged; dates, type, life areas, house and citations come from the extracted events; events the Synthesizer left out are still shown.
+8. Deterministic `.ics`.
 
 **Running it**
 - Development: the Vite dev server proxies `/api` to FastAPI (two processes).
@@ -215,7 +217,7 @@ Login, server-side encrypted profiles, multi-device sync, forecast history.
   - `lifeContext`: `{ relationship, lookingForPartner, work, kids, family, moneyFocus, healthFocus, goals, upcomingEvents[] }`
   - `focusAreas`: `LifeArea[]`
 - **Source**: `id`, `name`, `domain` / `url`, `type`, `language`, `origin` (`'curated' | 'user'`), `active`
-- **ForecastEvent**: `id`, `date`, `endDate?`, `title`, `type`, `lifeAreas[]`, `summary`, `personalNote?`, `sourceUrls[]` (as built in Phase 3a)
+- **ForecastEvent**: `id`, `date`, `endDate?`, `title`, `type`, `lifeAreas[]`, `summary`, `personalNote?`, `sourceUrls[]`, `inFocus`, `planets?`, `aspect?`, `house?` (as built in Phase 3a)
 - **MonthlyForecast**: `theme`, `events[]`, `icsContent` now; `keyDates[]` and `evidenceNote` come with the month overview (3b)
 - **Stored forecast record** (device): `version`, `month`, `forecast` (`result`, `generatedAt`, `sign`, `mode`, `focusAreas`, source report, evidence); a `review` is added later
 
@@ -239,14 +241,14 @@ Notes from the port: validation was hand-written (a 1:1 port of the TypeScript c
 ### Phase 1: Profile and real chart
 - Birth-place search and geocoding (done: bundled GeoNames city list, `GET /api/places`).
 - `/api/chart` with Skyfield (done; manual sign overrides are kept and marked in the UI).
-- Life-context form (done in Phase 2, and sent to the forecast agent in personalised mode).
+- Life-context form (done in Phase 2; in personalised mode it reaches the Synthesizer as priorities).
 - Onboarding flow (done in Phase 2: personalised or general).
 
 ### Phase 2: Sources (done)
 - Curated list, read directly; YouTube monthly video by transcript.
 - User sources (exclusive mode): pages, sites, YouTube channels.
 - Fallback to web search, and the evidence-gap retry.
-- Onboarding with personalised / general mode; life context sent to the forecast agent.
+- Onboarding with personalised / general mode; life context used for the forecast.
 
 ### Phase 3: Life areas and monthly output
 
@@ -254,7 +256,8 @@ Notes from the port: validation was hand-written (a 1:1 port of the TypeScript c
 - The 10 life areas and 3 event types end to end: Pydantic models for every request, answer and response, prompts, TypeScript types generated from the models (`npm run gen:types`).
 - Personal notes (only when a life context was sent), stable server-assigned event ids.
 - The latest forecast per month kept on the device.
-- Open: the new prompt has not been judged on a real run yet.
+- Two-step forecast: a per-source Extractor whose events are verified against the source text in code, priorities and ranking in code, and a Synthesizer that refers to events by id (done).
+- Open: the two-step pipeline has not been judged on a real run yet.
 
 **3b: views**
 - Month overview (theme, top key dates, evidence note), calendar grid, "Good time to…" list, event detail.

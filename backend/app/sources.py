@@ -270,6 +270,8 @@ def _write_cache(deps: PipelineDeps, source: SelectedSource, target: Target, doc
 class Gathered:
     documents: list[dict[str, str]] = field(default_factory=list)
     report: list[dict[str, Any]] = field(default_factory=list)
+    # For each report entry, the URLs of the documents that came from that source.
+    urls: list[list[str]] = field(default_factory=list)
 
     @property
     def used(self) -> int:
@@ -329,4 +331,5 @@ async def gather_documents(
     for documents, entry in results:
         gathered.documents.extend(documents)
         gathered.report.append(entry)
+        gathered.urls.append([document["url"] for document in documents])
     return gathered

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ from app.config import local_allowed_hosts
 from app.main import create_app
 from app.models import parse_profile
 from app.pipeline import PipelineDeps
+from app.prompts import EXTRACTOR_PROMPT, QUERY_AGENT_PROMPT, SYNTHESIZER_PROMPT
 
 PORT = 8000
 BASE_URL = f"http://127.0.0.1:{PORT}"
@@ -114,23 +116,50 @@ def profile_model(**overrides: Any):
     return parse_profile({**VALID_PROFILE, **overrides})
 
 
-def valid_event(**overrides: Any) -> dict[str, Any]:
+_DAY_RE = re.compile(
+    r"\b(?:nov(?:ember)?|dec(?:ember)?) (\d{1,2})\b|\bthe (\d{1,2})th\b", re.IGNORECASE
+)
+
+
+def extracted_event(**overrides: Any) -> dict[str, Any]:
+    """An event as the Extractor returns it. The default quote is in the first Tavily result."""
     return {
         "date": "2026-11-05",
         "title": "Mars ingress window",
-        "type": "goodTime",
-        "summary": "A sourced transit event.",
+        "advice": "A sourced transit event.",
+        "tone": "favourable",
         "lifeAreas": ["career"],
-        "sourceUrls": ["https://astro.example/nov-2026"],
+        "quote": "Mars ingress on Nov 5",
         **overrides,
     }
 
 
-def valid_forecast(**overrides: Any) -> dict[str, Any]:
+def auto_extraction(payload: dict[str, Any]) -> dict[str, Any]:
+    """A well-behaved Extractor: one event for the first day the document names, quoted from it."""
+    content = payload["document"]["content"]
+    match = _DAY_RE.search(content)
+    if not match:
+        return {"events": []}
+    day = int(match.group(1) or match.group(2))
+    return {
+        "events": [
+            extracted_event(
+                date=f"{payload['month']['firstDate'][:8]}{day:02d}",
+                title=f"Event in {payload['document']['source']}",
+                quote=content[max(0, match.start() - 25) : match.end()],
+            )
+        ]
+    }
+
+
+def auto_synthesis(payload: dict[str, Any]) -> dict[str, Any]:
+    """A well-behaved Synthesizer: one group per event, no merging."""
     return {
         "theme": "A month of sourced transitions.",
-        "events": [valid_event()],
-        **overrides,
+        "groups": [
+            {"eventIds": [event["id"]], "title": f"Synth: {event['title']}", "summary": "Summary."}
+            for event in payload["events"]
+        ],
     }
 
 
@@ -141,31 +170,37 @@ def nebius_response(content: Any) -> httpx.Response:
 class Upstream:
     """Records upstream calls and answers them from a script.
 
-    `calls` holds the Nebius and Tavily calls. Source pages are served from `pages` (URL to HTML,
-    XML or a ready response) and recorded in `page_calls`; any other page is a 404, so without
-    `pages` no curated source is readable and the pipeline falls back to the web search.
+    `calls` holds the Nebius and Tavily calls. Nebius calls are told apart by their system prompt:
+    the query agent answers `query`, the Extractor `extractor(payload)` and the Synthesizer
+    `synthesizer(payload)` (each may also be a ready answer, or give a whole response); `responder(body)`, when given,
+    answers every Nebius call instead. Source pages are served from `pages` (URL to HTML, XML or
+    a ready response) and recorded in `page_calls`; any other page is a 404, so without `pages`
+    no curated source is readable and the pipeline falls back to the web search.
     """
 
     def __init__(
         self,
-        nebius_outputs: list[Any] | None = None,
         tavily_results: list[Any] | None = None,
         nebius_status: int | None = None,
         nebius_error: Exception | None = None,
         delay: float = 0.0,
         responder: Any = None,
         pages: dict[str, Any] | None = None,
+        query: Any = None,
+        extractor: Any = auto_extraction,
+        synthesizer: Any = auto_synthesis,
     ) -> None:
         self.calls: list[dict[str, Any]] = []
         self.page_calls: list[str] = []
         self.pages = pages or {}
-        self.nebius_outputs = nebius_outputs or [{"query": DEFAULT_QUERY}, valid_forecast()]
         self.tavily_results = TAVILY_RESULTS if tavily_results is None else tavily_results
         self.nebius_status = nebius_status
         self.nebius_error = nebius_error
         self.delay = delay
         self.responder = responder
-        self._nebius_index = 0
+        self.query = {"query": DEFAULT_QUERY} if query is None else query
+        self.extractor = extractor
+        self.synthesizer = synthesizer
 
     async def __call__(self, request: httpx.Request) -> httpx.Response:
         url = str(request.url)
@@ -184,13 +219,45 @@ class Upstream:
             return httpx.Response(self.nebius_status, text="err")
         if self.responder:
             return nebius_response(self.responder(body))
-        index = min(self._nebius_index, len(self.nebius_outputs) - 1)
-        self._nebius_index += 1
-        return nebius_response(self.nebius_outputs[index])
+        prompt = body["messages"][0]["content"]
+        script = {
+            QUERY_AGENT_PROMPT: self.query,
+            EXTRACTOR_PROMPT: self.extractor,
+            SYNTHESIZER_PROMPT: self.synthesizer,
+        }[prompt]
+        payload = json.loads(body["messages"][1]["content"])
+        answer = script(payload) if callable(script) else script
+        return answer if isinstance(answer, httpx.Response) else nebius_response(answer)
+
+    def _nebius(self, prompt: str) -> list[dict[str, Any]]:
+        return [
+            json.loads(call["body"]["messages"][1]["content"])
+            for call in self.calls
+            if "tavily" not in call["url"] and call["body"]["messages"][0]["content"] == prompt
+        ]
 
     @property
     def services(self) -> list[str]:
-        return ["tavily" if "tavily" in call["url"] else "nebius" for call in self.calls]
+        """Which service each call went to, with the Nebius calls named by their agent."""
+        names = {
+            QUERY_AGENT_PROMPT: "query",
+            EXTRACTOR_PROMPT: "extract",
+            SYNTHESIZER_PROMPT: "synthesize",
+        }
+        return [
+            "tavily"
+            if "tavily" in call["url"]
+            else names.get(call["body"]["messages"][0]["content"], "nebius")
+            for call in self.calls
+        ]
+
+    @property
+    def extractor_payloads(self) -> list[dict[str, Any]]:
+        return self._nebius(EXTRACTOR_PROMPT)
+
+    @property
+    def synthesizer_payloads(self) -> list[dict[str, Any]]:
+        return self._nebius(SYNTHESIZER_PROMPT)
 
 
 PRIVATE_HOSTS = {"intranet.example": "10.0.0.5", "metadata.example": "169.254.169.254"}

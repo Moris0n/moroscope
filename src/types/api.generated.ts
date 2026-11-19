@@ -108,13 +108,31 @@ export interface Evidence {
   mode: 'user' | 'curated' | 'web';
 }
 /**
+ * One event of the forecast. Dates, type, life areas and citations come from the extracted
+ * events it is built from; only the title, summary and personal note are the Synthesizer's.
+ *
  * This interface was referenced by `MoroscopeApi`'s JSON-Schema
  * via the `definition` "ForecastEvent".
  */
 export interface ForecastEvent {
+  aspect?:
+    | 'newMoon'
+    | 'fullMoon'
+    | 'solarEclipse'
+    | 'lunarEclipse'
+    | 'ingress'
+    | 'retrograde'
+    | 'direct'
+    | 'conjunction'
+    | 'opposition'
+    | 'square'
+    | 'trine'
+    | 'sextile';
   date: string;
   endDate?: string;
+  house?: number;
   id: string;
+  inFocus?: boolean;
   lifeAreas: (
     | 'career'
     | 'money'
@@ -128,6 +146,21 @@ export interface ForecastEvent {
     | 'rest'
   )[];
   personalNote?: string;
+  planets?: (
+    | 'Sun'
+    | 'Moon'
+    | 'Mercury'
+    | 'Venus'
+    | 'Mars'
+    | 'Jupiter'
+    | 'Saturn'
+    | 'Uranus'
+    | 'Neptune'
+    | 'Pluto'
+    | 'Chiron'
+    | 'North Node'
+    | 'South Node'
+  )[];
   sourceUrls: string[];
   summary: string;
   title: string;
@@ -160,6 +193,8 @@ export interface MonthlyForecast {
  */
 export interface SourceReport {
   documents: number;
+  dropped?: number;
+  events?: number;
   id: string;
   name: string;
   origin: 'curated' | 'user' | 'web';
@@ -203,7 +238,7 @@ export interface GeneralProfile {
   targetMonth: string;
 }
 /**
- * The user's situation. Every answer is optional. Goes to the forecast agent, never to disk.
+ * The user's situation. Every answer is optional. Reaches the Synthesizer as priorities, never the disk.
  *
  * This interface was referenced by `MoroscopeApi`'s JSON-Schema
  * via the `definition` "LifeContext".

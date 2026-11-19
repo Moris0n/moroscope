@@ -1,16 +1,10 @@
 import React from 'react';
 import { Check, Loader2 } from 'lucide-react';
+import { FORECAST_STEPS } from '../utils/forecastShared';
 
 interface AgentProgressProps {
   currentStep: number;
 }
-
-const STEPS: { step: number; label: string }[] = [
-  { step: 1, label: 'Preparing' },
-  { step: 2, label: 'Reading your sources' },
-  { step: 3, label: 'Writing your forecast' },
-  { step: 4, label: 'Building the calendar' },
-];
 
 export const AgentProgress: React.FC<AgentProgressProps> = ({
   currentStep,
@@ -22,8 +16,8 @@ export const AgentProgress: React.FC<AgentProgressProps> = ({
       aria-label="Forecast generation progress"
       className="rounded-2xl bg-[#10172A] border border-slate-800/80 p-5"
     >
-      <ol className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-        {STEPS.map(({ step, label }) => {
+      <ol className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+        {FORECAST_STEPS.map(({ step, label }) => {
           const isDone = step < currentStep;
           const isActive = step === currentStep;
           return (

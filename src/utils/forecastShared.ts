@@ -1,6 +1,7 @@
 import {
   BirthPlace,
   EventType,
+  ForecastEvent,
   ForecastEvidence,
   ForecastResult,
   HealthFocus,
@@ -42,6 +43,47 @@ export const EVENT_TYPE_LABELS: Record<EventType, string> = {
 };
 
 export const EVENT_TYPES = Object.keys(EVENT_TYPE_LABELS) as EventType[];
+
+// What happens in the sky during an event, when the source says so.
+export const ASPECT_LABELS: Record<NonNullable<ForecastEvent['aspect']>, string> = {
+  newMoon: 'New Moon',
+  fullMoon: 'Full Moon',
+  solarEclipse: 'Solar eclipse',
+  lunarEclipse: 'Lunar eclipse',
+  ingress: 'changes sign',
+  retrograde: 'turns retrograde',
+  direct: 'turns direct',
+  conjunction: 'conjunction',
+  opposition: 'opposition',
+  square: 'square',
+  trine: 'trine',
+  sextile: 'sextile',
+};
+
+// The steps of the forecast pipeline, as the server numbers them in its progress events.
+export const FORECAST_STEPS: { step: number; label: string }[] = [
+  { step: 1, label: 'Preparing' },
+  { step: 2, label: 'Reading your sources' },
+  { step: 3, label: 'Extracting dated events' },
+  { step: 4, label: 'Writing your forecast' },
+  { step: 5, label: 'Building the calendar' },
+];
+
+const ordinal = (n: number) =>
+  `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+
+/** The sky details of an event in words ("Mercury, Venus · turns direct · 12th house"), or "". */
+export function eventSkyDetails(
+  event: Pick<ForecastEvent, 'planets' | 'aspect' | 'house'>
+): string {
+  return [
+    event.planets?.join(', '),
+    event.aspect ? ASPECT_LABELS[event.aspect] : undefined,
+    event.house ? `${ordinal(event.house)} house` : undefined,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
 
 // The five focus topics of profiles stored before the life areas existed.
 const LEGACY_PRIORITY_AREAS: Record<string, LifeArea> = {
@@ -314,6 +356,19 @@ export function isValidForecastShape(input: unknown): input is ForecastResult {
     )
       return false;
     if (!Array.isArray(e.sourceUrls) || !e.sourceUrls.every(isHttpUrl)) return false;
+    // Added with the Extractor; forecasts stored before it have none of these.
+    if (e.inFocus !== undefined && typeof e.inFocus !== 'boolean') return false;
+    if (
+      e.planets !== undefined &&
+      !(Array.isArray(e.planets) && e.planets.every((p: unknown) => typeof p === 'string'))
+    )
+      return false;
+    if (e.aspect !== undefined && !Object.hasOwn(ASPECT_LABELS, e.aspect as string)) return false;
+    if (
+      e.house !== undefined &&
+      !(Number.isInteger(e.house) && (e.house as number) >= 1 && (e.house as number) <= 12)
+    )
+      return false;
   }
   return true;
 }
@@ -545,6 +600,9 @@ const SOURCE_STATUSES = new Set(['used', 'no_forecast', 'failed']);
 const SOURCE_ORIGINS = new Set(['curated', 'user', 'web']);
 const EVIDENCE_MODES = new Set(['user', 'curated', 'web']);
 
+const isCount = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0;
+
 export function parseSourceReport(input: unknown): SourceReport[] {
   if (!Array.isArray(input)) return [];
   const out: SourceReport[] = [];
@@ -567,6 +625,8 @@ export function parseSourceReport(input: unknown): SourceReport[] {
       status: r.status as SourceReport['status'],
       reason: typeof r.reason === 'string' ? r.reason : undefined,
       documents: typeof r.documents === 'number' ? r.documents : 0,
+      ...(isCount(r.events) ? { events: r.events } : {}),
+      ...(isCount(r.dropped) ? { dropped: r.dropped } : {}),
     });
   }
   return out;

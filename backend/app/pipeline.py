@@ -1,4 +1,5 @@
-"""Forecast pipeline: profile snapshot -> read sources (web search fallback) -> forecast agent -> .ics."""
+"""Forecast pipeline: profile snapshot -> read sources (web search fallback) -> extract and verify
+dated events -> rank -> synthesize -> assemble, with the .ics."""
 
 from __future__ import annotations
 
@@ -12,11 +13,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-import httpx
 from pydantic import ValidationError
 
 from .config import AgentConfig, PipelineDeps, PipelineError, load_agent_config
-from .forecast import empty_forecast, validate_forecast_payload
+from .extract import DocumentExtraction, extract_documents
+from .forecast import assemble_forecast, empty_forecast, rank_events, synthesizer_payload
+from .llm import call_nebius_chat, post_json
 from .models import (
     LIFE_AREA_LABELS,
     AgentQuery,
@@ -27,17 +29,15 @@ from .models import (
     parse_profile,
     stored_profile,
 )
-from .prompts import FORECAST_AGENT_PROMPT, QUERY_AGENT_PROMPT
+from .priorities import build_priorities
+from .prompts import QUERY_AGENT_PROMPT, SYNTHESIZER_PROMPT
 from .sources import SourcesConfig, gather_documents, select_sources, trim_documents
 from .validation import (
-    MAX_EXCERPT_LENGTH,
     MAX_RESULT_CONTENT_LENGTH,
     MAX_RESULTS,
     MONTH_NAMES,
     is_http_url,
-    is_utf8_safe,
     is_uuid,
-    parse_llm_json,
     parse_month_range,
     primary_sign,
 )
@@ -46,86 +46,8 @@ from .webpages import Target
 logger = logging.getLogger("uvicorn.error")
 
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
-NEBIUS_ATTEMPTS = 2
-# Room for the answer, including what a reasoning model spends on thinking before it writes.
-# Without it the provider's default applies, which cut real forecasts off.
-NEBIUS_MAX_OUTPUT_TOKENS = 8000
 # With fewer default sources than this, the open web is searched as well.
 MIN_CURATED_SOURCES = 2
-
-
-async def _post_json(deps: PipelineDeps, service: str, url: str, **kwargs: Any) -> Any:
-    try:
-        response = await deps.http.post(url, **kwargs)
-    except httpx.TimeoutException:
-        raise PipelineError(504, "Upstream request timed out.") from None
-    except httpx.HTTPError:
-        raise PipelineError(502, "Upstream request failed.") from None
-    if not response.is_success:
-        raise PipelineError(502, f"{service} failed (HTTP {response.status_code}).")
-    try:
-        body = response.json()
-    except ValueError:
-        raise PipelineError(502, f"{service.split()[0]} returned a non-JSON response.") from None
-    if not is_utf8_safe(body):
-        raise PipelineError(502, f"{service.split()[0]} returned malformed text.")
-    return body
-
-
-async def call_nebius_chat(
-    config: AgentConfig, deps: PipelineDeps, system_prompt: str, user_payload: Any
-) -> Any:
-    """One JSON answer from the model. A cut-off or unparseable answer is asked for once more."""
-    request = {
-        "model": config.nebius_model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": json.dumps(user_payload, ensure_ascii=False, separators=(",", ":")),
-            },
-        ],
-        "response_format": {"type": "json_object"},
-        "max_tokens": NEBIUS_MAX_OUTPUT_TOKENS,
-    }
-    problem = ""
-    for attempt in range(NEBIUS_ATTEMPTS):
-        body = await _post_json(
-            deps,
-            "Nebius chat request",
-            f"{config.nebius_base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {config.nebius_api_key}"},
-            json=request,
-        )
-        try:
-            choice = body["choices"][0]
-            content, finish = choice["message"]["content"], choice.get("finish_reason")
-        except (KeyError, IndexError, TypeError):
-            content, finish = None, None
-        if not isinstance(content, str) or not content.strip():
-            problem = (
-                "Nebius ran out of output tokens before answering."
-                if finish == "length"
-                else "Nebius returned an empty completion."
-            )
-        else:
-            try:
-                return parse_llm_json(content)
-            except ValueError as exc:
-                problem = (
-                    "Nebius ran out of output tokens; its answer was cut off."
-                    if finish == "length"
-                    else "Nebius returned malformed JSON."
-                )
-                # Sizes and position only: the answer itself may hold the user's life context.
-                logger.warning(
-                    "Unparseable model answer (attempt %d): finish_reason=%s, %d chars, %s",
-                    attempt + 1,
-                    finish,
-                    len(content),
-                    exc,
-                )
-    raise PipelineError(502, problem)
 
 
 async def run_tavily_search(
@@ -142,7 +64,7 @@ async def run_tavily_search(
     }
     if include_domains:
         request["include_domains"] = include_domains
-    body = await _post_json(deps, "Tavily search", TAVILY_SEARCH_URL, json=request)
+    body = await post_json(deps, "Tavily search", TAVILY_SEARCH_URL, json=request)
     raw = body.get("results") if isinstance(body, dict) else None
     results = []
     for item in (raw if isinstance(raw, list) else [])[:MAX_RESULTS]:
@@ -205,25 +127,29 @@ async def save_profile_snapshot(
     return resolved_id, snapshot
 
 
-def _person(snapshot: Profile, life_context: dict[str, Any]) -> dict[str, Any]:
-    """What the forecast agent learns about the user: signs, focus areas and the life context.
+def reading_sign(snapshot: Profile) -> dict[str, Any]:
+    """The sign the sources are read for, and what the search query agent may know besides.
 
-    Never the name, the birth date, time or place, or a timezone.
+    Never the name, the birth date, time or place, a timezone or the life context.
     """
     sign, kind = primary_sign(snapshot)
-    person: dict[str, Any] = {
-        "sign": sign,
-        "signKind": kind,
-        "focusAreas": list(snapshot.focus_areas),
-    }
-    if isinstance(snapshot, PersonalProfile):
-        person["sunSign"] = snapshot.sun_sign
-        person["moonSign"] = snapshot.moon_sign
-        if snapshot.rising_sign:
-            person["risingSign"] = snapshot.rising_sign
-        if life_context:
-            person["lifeContext"] = life_context
-    return person
+    return {"sign": sign, "signKind": kind, "focusAreas": list(snapshot.focus_areas)}
+
+
+def _report_extraction(
+    report: list[dict[str, Any]], urls: list[list[str]], results: list[DocumentExtraction]
+) -> None:
+    """Add to each source's report entry how many of its events were verified and dropped."""
+    by_url = {result.url: result for result in results}
+    for entry, own_urls in zip(report, urls):
+        own = [by_url[url] for url in own_urls if url in by_url]
+        if not own:
+            continue
+        entry["events"] = sum(len(result.events) for result in own)
+        entry["dropped"] = sum(len(result.dropped) for result in own)
+        if all(result.error for result in own):
+            entry["status"] = "failed"
+            entry["reason"] = "The dated events could not be extracted from its text."
 
 
 async def run_forecast_pipeline(
@@ -235,15 +161,16 @@ async def run_forecast_pipeline(
     sources: SourcesConfig | None = None,
 ) -> dict[str, Any]:
     saved_id, snapshot = await save_profile_snapshot(deps, profile, profile_id)
-    # The life context goes to the forecast agent only; it is not part of the stored snapshot.
+    # The life context goes to the Synthesizer only, as the priorities worked out from it; it is
+    # not part of the stored snapshot.
     life_context = profile.life_answers() if isinstance(profile, PersonalProfile) else {}
-    person = _person(snapshot, life_context)
+    reading = reading_sign(snapshot)
     on_step(1)
 
     month_range = parse_month_range(snapshot.target_month)
     if not month_range:
         raise PipelineError(400, 'targetMonth must be in "Month YYYY" format.')
-    target = Target(person["sign"], MONTH_NAMES[month_range.month - 1], month_range.year)
+    target = Target(reading["sign"], MONTH_NAMES[month_range.month - 1], month_range.year)
     month = {
         "firstDate": month_range.first_date,
         "lastDate": month_range.last_date,
@@ -255,7 +182,7 @@ async def run_forecast_pipeline(
     on_step(2)
     exclusive, selected = select_sources(sources or SourcesConfig())
     gathered = await gather_documents(deps, selected, target)
-    documents, report = gathered.documents, gathered.report
+    documents, report, urls = gathered.documents, gathered.report, gathered.urls
 
     sites = [source for source in selected if source.domain]
     if sites:
@@ -266,6 +193,7 @@ async def run_forecast_pipeline(
         except PipelineError as exc:
             found = []
             report.extend(source.report("failed", exc.message) for source in sites)
+            urls.extend([] for _ in sites)
         else:
             for source in sites:
                 own = [d for d in found if d["source"].endswith(source.domain or "")]
@@ -274,6 +202,7 @@ async def run_forecast_pipeline(
                     if own
                     else source.report("no_forecast", f"No forecast for {target.label} was found.")
                 )
+                urls.append([d["url"] for d in own])
         documents.extend(found)
 
     mode = "user" if exclusive else "curated"
@@ -285,10 +214,10 @@ async def run_forecast_pipeline(
             deps,
             QUERY_AGENT_PROMPT,
             {
-                "sign": person["sign"],
-                "signKind": person["signKind"],
+                "sign": reading["sign"],
+                "signKind": reading["signKind"],
                 "month": month,
-                "focusAreas": [LIFE_AREA_LABELS[area] for area in person["focusAreas"]],
+                "focusAreas": [LIFE_AREA_LABELS[area] for area in reading["focusAreas"]],
             },
         )
         try:
@@ -307,6 +236,7 @@ async def run_forecast_pipeline(
                 "documents": len(found),
             }
         )
+        urls.append([d["url"] for d in found])
 
     documents = trim_documents(documents)
     evidence = {"mode": mode, "gap": not documents}
@@ -332,24 +262,48 @@ async def run_forecast_pipeline(
             "week of the month before."
         )
         on_step(4)
+        on_step(5)
         return answer(empty_forecast(theme))
 
-    forecast_payload: dict[str, Any] = {"month": month, "person": person, "documents": documents}
-    if isinstance(custom_excerpt, str) and custom_excerpt.strip():
-        forecast_payload["customExcerpt"] = custom_excerpt[:MAX_EXCERPT_LENGTH]
-    forecast_output = await call_nebius_chat(config, deps, FORECAST_AGENT_PROMPT, forecast_payload)
-    errors, forecast = validate_forecast_payload(
-        forecast_output,
-        month_range,
-        person["focusAreas"],
-        {d["url"] for d in documents},
-        personal_notes=bool(life_context),
+    # Extract: one call per document, with nothing about the user. Each event is then checked
+    # against the text of its document; what fails is dropped and counted.
+    extractions = await extract_documents(
+        config, deps, month, month_range, reading["sign"], documents
     )
+    _report_extraction(report, urls, extractions)
+    verified = [event for extraction in extractions for event in extraction.events]
+
+    # Rank: hand-picked focus areas, then what the life context points to, then the rest.
+    priorities = build_priorities(reading["focusAreas"], life_context)
+    events = rank_events(verified, priorities, reading["sign"])
+
+    on_step(4)
+    if not events:
+        # No event held up, so there is nothing the Synthesizer could refer to.
+        on_step(5)
+        return answer(
+            empty_forecast(
+                f"The sources for {target.label} were read, but no dated event in them could be "
+                "confirmed against the source text, so no events were generated."
+            )
+        )
+
+    # Synthesize: wording only. The Synthesizer gets the events, never the source text.
+    payload = synthesizer_payload(
+        month,
+        reading["sign"],
+        priorities,
+        life_context.get("upcomingEvents") or [],
+        events,
+        custom_excerpt,
+    )
+    synthesized = await call_nebius_chat(config, deps, SYNTHESIZER_PROMPT, payload)
+
+    on_step(5)
+    errors, forecast = assemble_forecast(synthesized, events, personal_notes=bool(life_context))
     if errors or forecast is None:
         raise PipelineError(
             502,
-            f"Forecast agent returned invalid data: {errors[0] if errors else 'schema violation'}.",
+            f"Synthesizer returned invalid data: {errors[0] if errors else 'schema violation'}.",
         )
-
-    on_step(4)
     return answer(forecast)

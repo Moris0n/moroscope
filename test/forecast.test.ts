@@ -7,6 +7,8 @@ import {
   LIFE_AREAS,
   isLegacyProfile,
   isValidBackendUrl,
+  FORECAST_STEPS,
+  eventSkyDetails,
   isValidForecastShape,
   mergeProfileWithDefaults,
   normalizeSourceUrl,
@@ -23,6 +25,7 @@ import {
 import {
   SseParser,
   buildMonthlyHeatmap,
+  heatmapRows,
   parseForecastPayload,
   readForecastSseStream,
   sourceLabel,
@@ -192,10 +195,30 @@ test('isValidForecastShape guards the client against malformed results', () => {
     { sourceUrls: ['javascript:alert(1)'] },
     { personalNote: 5 },
     { endDate: '2026-11-31' },
+    { inFocus: 'yes' },
+    { planets: 'Mercury' },
+    { planets: [5] },
+    { aspect: 'wobble' },
+    { house: 13 },
+    { house: 1.5 },
+    { house: '8' },
   ]) {
     const events = [{ ...validEvent(), ...bad }];
     assert.equal(isValidForecastShape({ theme: 't', icsContent: ics, events }), false, JSON.stringify(bad));
   }
+  // The fields added with the Extractor are optional: a forecast stored before them still loads.
+  const detailed = validEvent({
+    inFocus: true,
+    planets: ['Mercury', 'Venus'],
+    aspect: 'direct',
+    house: 12,
+  });
+  assert.equal(isValidForecastShape({ theme: 't', icsContent: ics, events: [detailed] }), true);
+  assert.equal(eventSkyDetails(detailed), 'Mercury, Venus · turns direct · 12th house');
+  assert.equal(eventSkyDetails({ aspect: 'newMoon', house: 1 }), 'New Moon · 1st house');
+  assert.equal(eventSkyDetails({ house: 22 as number }), '22nd house');
+  assert.equal(eventSkyDetails({ house: 3 }), '3rd house');
+  assert.equal(eventSkyDetails(validEvent()), '');
   // Ids must tell the events of a forecast apart.
   assert.equal(
     isValidForecastShape({ theme: 't', icsContent: ics, events: [validEvent(), validEvent()] }),
@@ -222,6 +245,30 @@ test('buildMonthlyHeatmap has a row per life area with inclusive ranges and mixe
   assert.deepEqual(matrix[2].filter((c) => c.events.length).map((c) => c.day), [5, 6, 7]);
   assert.equal(matrix[3].every((c) => c.events.length === 0), true);
   assert.equal(buildMonthlyHeatmap(events, range, LIFE_AREAS).length, 10);
+});
+
+test('the month map shows the focus areas first, then the other areas that have events', () => {
+  const events: TransitEvent[] = [
+    validEvent({ lifeAreas: ['rest', 'career'] }),
+    validEvent({ id: 'b', lifeAreas: ['money'] }),
+    validEvent({ id: 'c', lifeAreas: ['love', 'money'] }),
+  ];
+  // Focus areas keep their picked order and stay even without events.
+  assert.deepEqual(heatmapRows(events, ['health', 'love']), ['health', 'love', 'career', 'money', 'rest']);
+  assert.deepEqual(heatmapRows(events, []), ['career', 'money', 'love', 'rest']);
+  assert.deepEqual(heatmapRows([], ['family']), ['family']);
+  assert.deepEqual(heatmapRows([], []), LIFE_AREAS);
+});
+
+test('the progress steps match the five steps the server reports', () => {
+  assert.deepEqual(FORECAST_STEPS.map((s) => s.step), [1, 2, 3, 4, 5]);
+  assert.deepEqual(FORECAST_STEPS.map((s) => s.label), [
+    'Preparing',
+    'Reading your sources',
+    'Extracting dated events',
+    'Writing your forecast',
+    'Building the calendar',
+  ]);
 });
 
 function storedForecast(month: string, generatedAt: string, overrides: Partial<StoredForecast> = {}): StoredForecast {
@@ -605,8 +652,8 @@ test('forecast payload extras are parsed defensively and cited URLs get source n
     profileId: 7,
     evidence: { mode: 'user', gap: true },
     sources: [
-      { id: 'rux-youtube', name: 'Rux', url: 'https://www.youtube.com/@Rux', origin: 'curated', status: 'used', documents: 2 },
-      { id: 'x', name: 'Bad', url: 'javascript:alert(1)', origin: 'user', status: 'failed', reason: 'HTTP 404' },
+      { id: 'rux-youtube', name: 'Rux', url: 'https://www.youtube.com/@Rux', origin: 'curated', status: 'used', documents: 2, events: 4, dropped: 1 },
+      { id: 'x', name: 'Bad', url: 'javascript:alert(1)', origin: 'user', status: 'failed', reason: 'HTTP 404', events: -1, dropped: 'two' },
       { id: 'y', name: 'Unknown status', url: '', origin: 'user', status: 'exploded' },
       'junk',
     ],
@@ -616,6 +663,11 @@ test('forecast payload extras are parsed defensively and cited URLs get source n
   assert.deepEqual(payload.sources.map((s) => [s.id, s.url]), [
     ['rux-youtube', 'https://www.youtube.com/@Rux'],
     ['x', ''],
+  ]);
+  // The per-source event counts are kept when they are counts; older reports have none.
+  assert.deepEqual(payload.sources.map((s) => [s.events, s.dropped]), [
+    [4, 1],
+    [undefined, undefined],
   ]);
   assert.equal(parseForecastPayload({}).evidence, null);
   assert.deepEqual(parseForecastPayload({ evidence: { mode: 'magic', gap: false } }).sources, []);

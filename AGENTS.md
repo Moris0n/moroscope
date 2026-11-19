@@ -25,13 +25,16 @@
   upgrading dependencies.
 - The API rejects requests whose `Host` is not allow-listed and whose `Origin` does not match
   `Host`. The Vite proxy must keep `changeOrigin: false` or browser requests get a 403.
-- Generating a forecast calls Nebius and Tavily with the keys in `.env` and costs money. For
-  smoke tests, override `NEBIUS_BASE_URL` and `DATA_DIR` so nothing real is called or written.
+- Generating a forecast calls Nebius and Tavily with the keys in `.env` and costs money: one
+  Extractor call per source document that is not cached, plus one Synthesizer call. For smoke
+  tests, override `NEBIUS_BASE_URL` and `DATA_DIR` so nothing real is called or written.
 - `/api/chart` needs `backend/app/resources/de421.bsp` (17 MB, git-ignored). Fetch it once with
   `cd backend && uv run python scripts/fetch_ephemeris.py`; without it the chart tests fail and the
   endpoint answers 503.
 - Backend tests never hit the network: upstream calls and source pages go through
-  `httpx.MockTransport` (`backend/tests/helpers.py`), the YouTube transcript and DNS lookups through
+  `httpx.MockTransport` (`backend/tests/helpers.py`; its `Upstream` tells the query agent, the
+  Extractor and the Synthesizer apart by their system prompt, and the extractions run side by side,
+  so never assert their order), the YouTube transcript and DNS lookups through
   fakes on `PipelineDeps`. The pages in `backend/tests/fixtures/` are hand-written stand-ins that
   copy only the structure of the real sites (headings, links); keep real site text out of them.
 - A forecast reads the source sites directly (`backend/app/webpages.py`, `youtube.py`). When a
@@ -41,18 +44,29 @@
   then fix the reader and its fixture together.
 - Source texts are cached under `DATA_DIR/cache/sources/` (7 days; 6 hours for "not published
   yet"). Delete that directory to force a re-read.
+- A forecast is built in two LLM steps (`backend/app/extract.py`, `forecast.py`). The Extractor
+  gets one source document and nothing about the user; code keeps an event only if its quote is in
+  the document and names the day. The Synthesizer gets the verified events (never source text or
+  quotes) and only words them: dates, types, life areas, houses, citations and ids are set in code.
+  Keep it that way: no rule that a model could break may be enforced only by a prompt.
+- Extractor answers are cached under `DATA_DIR/cache/extractions/`, keyed by the document text,
+  sign, month, model and the prompt text, so editing `EXTRACTOR_PROMPT` or the model makes every
+  document cost a call again. The cache holds the unchecked answers; the checks run on every read.
 - Privacy rule, covered by tests: name, birth date, time and place never go to Nebius or Tavily.
-  The forecast agent gets signs, focus areas and (personal mode) the life context; the life
-  context is never written to `data/profiles`. Validation errors name the field and never repeat
+  The Extractor gets the month, the sign and one document. The Synthesizer gets the sign and, of
+  the user, only the priorities text built in code from the focus areas and the life context
+  (`backend/app/priorities.py`), the dated plans and the pasted excerpt. The life context is never
+  written to `data/profiles` or to the extraction cache. Validation errors name the field and never repeat
   the submitted value (`models.error_messages`).
 - One taxonomy everywhere: the 10 life areas and 3 event types in `backend/app/models.py`
-  (`LifeArea`, `EventType`). The frontend labels in `src/utils/forecastShared.ts` and the list in
-  `FORECAST_AGENT_PROMPT` must name the same ids.
+  (`LifeArea`, `EventType`). The frontend labels in `src/utils/forecastShared.ts`, the list in
+  `EXTRACTOR_PROMPT` and the house table in `backend/app/priorities.py` must name the same ids.
+  The same goes for the planets and aspects (`Planet`, `Aspect`; `ASPECT_LABELS` in the frontend).
 - Generated forecasts are kept in the browser only (`moroscope_forecasts_v1`, one versioned record
   per month, `src/utils/forecastStore.ts`). They hold personal notes: nothing of them is stored on
   the server.
 - `backend/notebooks/forecast_walkthrough.ipynb` runs the pipeline step by step for a profile in
-  `data/profiles` and prints the source texts, the prompt, the raw LLM answer and the validation
-  result (kernel: `backend/.venv`). Reading the sites is free; the Nebius call only runs with
-  `RUN_LLM = True`. Its outputs contain personal data: clear them before committing. It follows
+  `data/profiles` and prints the source texts, the priorities, each extraction and its checks, the
+  ranking, the Synthesizer's prompt and raw answer and the assembled forecast (kernel:
+  `backend/.venv`). Reading the sites is free; the Nebius calls only run with `RUN_LLM = True`. Its outputs contain personal data: clear them before committing. It follows
   `run_forecast_pipeline` by hand, so update it when the order of the pipeline steps changes.

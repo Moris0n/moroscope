@@ -8,8 +8,9 @@ Google AI Studio (as "CelestialPulse").
 ## Stack
 - Frontend: React 19, Vite 8, Tailwind CSS 4, lucide-react, motion, vite-plugin-pwa
 - Backend: Python 3.12+, FastAPI + Uvicorn, Pydantic v2, httpx, Skyfield (`backend/`, managed with `uv`)
-- LLM: Nebius (OpenAI-compatible `/chat/completions`, JSON mode). A forecast prompt holds up to
-  about 90,000 characters of source text, so `NEBIUS_MODEL` needs a context window of 32k tokens or more.
+- LLM: Nebius (OpenAI-compatible `/chat/completions`, JSON mode). Each source text (up to about
+  30,000 characters) is sent in a call of its own, so `NEBIUS_MODEL` needs a context window of 16k
+  tokens or more.
 - Sources: read directly over HTTP; YouTube transcripts with `youtube-transcript-api` (unofficial)
 - Search: Tavily (`/search`, advanced depth), only as a fallback and for user-added bare sites
 - Tests: pytest (backend), `node:test` + `tsx` (frontend)
@@ -48,8 +49,9 @@ Optional: `PORT` (default 8000), `HOST` (default 127.0.0.1), `ALLOWED_HOSTS`, `D
     customExcerpt?, sources?: {disabledCurated, user: [{id, url, active}], includeCurated}}`.
     Answer: `{result: {theme, events, icsContent}, profileId, sources: [per-source report],
     evidence: {mode, gap}}`. An event is `{id, date, endDate?, title, type, lifeAreas, summary,
-    personalNote?, sourceUrls}`.
-- `pipeline.py` – the steps:
+    personalNote?, sourceUrls, inFocus, planets?, aspect?, house?}`. A source report entry also has
+    `events` (verified) and `dropped` (failed the check against the source text).
+- `pipeline.py` – the steps (five progress steps):
   1. Save the profile snapshot (never the life context).
   2. Read the selected sources for the primary sign (Rising if it leads, else Sun; in general mode
      the chosen sign). Active user sources are used alone ("exclusive"); otherwise the enabled
@@ -57,22 +59,47 @@ Optional: `PORT` (default 8000), `HOST` (default 127.0.0.1), `ALLOWED_HOSTS`, `D
      With fewer than 2 usable curated sources: Nebius "query agent" plus an open Tavily search.
      With no documents at all: an empty forecast with `evidence.gap`, without any LLM call. In
      exclusive mode the search is never broadened; the UI offers "Also use default sources".
-  3. Nebius "forecast agent" → `{theme, events[]}` (`FORECAST_AGENT_PROMPT`) from
-     `{month, person, documents}`; checked by `forecast.py`.
-  4. `.ics` built deterministically.
-- `models.py` – Pydantic models for every request, the two agents' answers and every response,
+  3. Extract (`extract.py`): one Nebius call per document, three at a time, with the month, the
+     sign and that document only (`EXTRACTOR_PROMPT`). Each returned event is then checked in
+     code. If the Extractor fails for every document the request fails (502); if it fails for
+     some, those sources are reported as failed. Then rank (`priorities.py`, `forecast.py`). With
+     no verified event: an empty forecast, without a Synthesizer call.
+  4. Synthesize: one Nebius call (`SYNTHESIZER_PROMPT`) with `{month, sign, priorities, events,
+     upcomingEvents?, customExcerpt?}`; no source text. It returns `{theme, groups: [{eventIds,
+     title, summary, personalNote?}]}`.
+  5. Assemble (`forecast.py`) and build the `.ics` deterministically.
+- `extract.py` – the Extractor call, its cache (`DATA_DIR/cache/extractions/`, keyed by document
+  text, sign, month, model and prompt; no user data) and the checks, as pure functions: the quote
+  must be in the document (case, punctuation and spacing ignored; parts around "..." in order) and
+  must name the day the event starts or ends on, in digits or spelled out (any day of a span of
+  up to three days; an event spanning the whole month is exempt); a span reaching out of the month is cut to it; an end date equal to the
+  start is left out. A failed check drops that event only. The source's tone becomes the event
+  type (favourable → `goodTime`, caution → `caution`, neutral → `keyDate`). Event ids are a hash
+  of month, document URL, dates and quote, so they survive regeneration while the extraction is
+  cached.
+- `priorities.py` – the house table of the 10 life areas, life context → priorities (for example
+  looking for a job → career, houses 10 and 6; children → family, houses 5 and 4), the ranking
+  (hand-picked focus areas in their order, then the derived ones, then the rest; never a filter)
+  and the narrative: a fixed template that says only what the user stated, the one description
+  of the user the Synthesizer gets. Whole-sign house of an event from the sign it happens in,
+  counted from the reading sign, when the source states no house.
+- `forecast.py` – ranking of the verified events (sets `inFocus`; when code computed the house,
+  the life areas of that house are added to the event's tags), the Synthesizer's input, and the assembly: ids that do not exist
+  or are used twice are skipped, of a group the largest part whose members have the same dates
+  is merged into one event and the others stay separate (citations, life areas and planets from all members; a key date when their
+  directions differ), events the Synthesizer left out are appended in the Extractor's words,
+  the result is sorted by date, personal notes are dropped unless a life context was sent.
+- `llm.py` – the Nebius chat call (JSON mode, `max_tokens`, one retry for a cut-off or
+  unparseable answer) and the JSON POST helper.
+- `models.py` – Pydantic models for every request, the three agents' answers and every response,
   and the taxonomy: 10 life areas (`career`, `money`, `love`, `family`, `health`, `community`,
-  `communication`, `learning`, `creativity`, `rest`) and 3 event types (`keyDate`, `goodTime`,
-  `caution`). Wire format is camelCase; types are strict; unknown fields are ignored. Error
-  messages give the field path and the problem, never the submitted value.
-- `forecast.py` – the rules a model cannot check alone (dates within the month, citations ⊆
-  document URLs, chronological order, one chosen focus area per event), the event ids (a hash of
-  month, dates, title and type, assigned by the server, with a suffix on a collision) and the
-  personal notes, which are dropped unless a life context was sent.
+  `communication`, `learning`, `creativity`, `rest`), 3 event types (`keyDate`, `goodTime`,
+  `caution`), planets and aspects. Wire format is camelCase; types are strict; unknown fields
+  are ignored. Error messages give the field path and the problem, never the submitted value.
 - `sources.py` – the curated list (Written in the Stars by Rux on YouTube, Cafe Astrology,
   Astrology Zone, Astrostyle, Sally Kirkman), the request's source settings, selection, concurrent
   reading with a per-source report (`used` / `no_forecast` / `failed`), the file cache and the
-  prompt-size budget.
+  size budget of the texts.
 - `webpages.py` – page fetching (public addresses only, every redirect hop checked, 3 MB cap),
   HTML to headings and paragraphs (standard library), one reader per curated site that checks the
   month and year and cuts out the sign, and a generic reader for user-added pages.
@@ -85,7 +112,7 @@ Optional: `PORT` (default 8000), `HOST` (default 127.0.0.1), `ALLOWED_HOSTS`, `D
   over 15,000, CC BY 4.0; rebuilt with `scripts/build_cities.py`). English/ASCII city names only.
 - `validation.py` – month and date helpers, small format checks, parsing of model output.
 - `ics.py` – RFC 5545 calendar generation (UID from the event id; the personal note is included).
-  `prompts.py` – the two system prompts.
+  `prompts.py` – the three system prompts (query agent, Extractor, Synthesizer).
 - `scripts/export_schema.py` – writes `schema/api.schema.json` from the models; the frontend
   types are generated from it.
 - `config.py` – environment configuration and the allowed-hosts list.
@@ -113,13 +140,15 @@ Optional: `PORT` (default 8000), `HOST` (default 127.0.0.1), `ALLOWED_HOSTS`, `D
   next time the birth data changes.
 - `api/sourcesApi.ts` – the curated source list. `components/SourcesManager.tsx` – switch default
   sources on and off, add / toggle / remove own sources, per-source status of the last forecast.
-- `components/` – Navigation, ProfileSummary, ForecastResults, AgentProgress, TransitHeatmapMatrix,
+- `components/` – Navigation, ProfileSummary, ForecastResults (events in focus are marked; planets,
+  aspect and house when known; verified events per source), AgentProgress (five steps),
+  TransitHeatmapMatrix (rows: the focus areas, then the other areas that have events),
   SourcesManager, NatalProfilePanel, BirthPlaceSearch, PWAInstallButton, OfflineIndicator.
   EnergyWaveChart and ActivityScheduler are kept but not rendered (they run on synthetic data).
 - `utils/forecastShared.ts` – client-side checks, month parsing, profile repair, what is sent
   for a profile (`profileRequestBody`: a general profile sends only sign, month and focus areas),
   life areas and event types with their labels, life-context options, source-settings repair.
-- `utils/forecastHelpers.ts` – SSE parser/reader, `.ics` download, monthly heatmap.
+- `utils/forecastHelpers.ts` – SSE parser/reader, `.ics` download, monthly heatmap and its rows.
 - `utils/storage.ts` – localStorage helpers.
 - `utils/astrologyEngine.ts` – zodiac metadata and the synthetic energy data for the hidden charts.
 - `utils/timezoneEngine.ts` – IANA offset helpers, timezone options.
@@ -129,17 +158,20 @@ Optional: `PORT` (default 8000), `HOST` (default 127.0.0.1), `ALLOWED_HOSTS`, `D
 
 ## Status
 ### Real / production-quality
-- Forecast pipeline on directly read, month-checked sources with strict validation, SSE progress,
-  a per-source report and an honest evidence gap
+- Forecast pipeline on directly read, month-checked sources: per-source extraction with every
+  event checked against the source text in code, a Synthesizer that can only word existing
+  events, SSE progress, a per-source report and an honest evidence gap
 - Curated and user-added sources (pages, sites, YouTube channels), exclusive mode
-- Onboarding with personalised and general mode; life context reaches the forecast agent only
+- Onboarding with personalised and general mode; of the life context only the priorities text
+  and the dated plans reach the Synthesizer
 - Life areas end to end: focus picker, event tags, month map rows, `.ics` text; event types
-  (key date / good time / be careful); personal notes for personal profiles; stable event ids
+  (key date / good time / be careful); personal notes for personal profiles; event ids that
+  survive regeneration
 - Profile persistence, `.ics` export, month map from generated events, forecasts kept per month on
   the device
 - Sun, Moon and Rising signs from a real ephemeris, checked against published charts; birth-place
   search with coordinates and timezone
-- 179 backend tests (`backend/tests/`), 25 frontend tests (`test/forecast.test.ts`)
+- 226 backend tests (`backend/tests/`), 27 frontend tests (`test/forecast.test.ts`)
 
 ### Fragile by nature
 - The site readers depend on each site's page layout, and the YouTube transcript download is
@@ -151,19 +183,27 @@ Optional: `PORT` (default 8000), `HOST` (default 127.0.0.1), `ALLOWED_HOSTS`, `D
 ## Known issues / TODO
 The product plan and phased roadmap live in
 [`implementation_plan.md`](.aistudio/artifacts/brain/d04094be-69b6-4d03-85cd-3b2d3db6ae2f/implementation_plan.md).
-Phases 0 to 2 and Phase 3a (life areas, new forecast model, Pydantic models) are done. Next: 3b
+Phases 0 to 2 and Phase 3a (life areas, new forecast model, Pydantic models, the two-step
+Extractor / Synthesizer pipeline) are done. Next: 3b
 (calendar grid, "Good time to…" list, event detail), then 3c (per-event and filtered `.ics`).
 Remaining items:
 
+- [ ] The two-step pipeline has not been judged on a real run yet (only with a scripted model, and
+      the quote check against the live source texts). Open after the first paid run: how often a
+      real event is dropped because the model paraphrases its quote or a transcript garbles a
+      date (the per-source `dropped` count shows it), and how well the Synthesizer groups the same
+      event across sources (a missed merge shows as two similar events).
+- [ ] The theme, summaries and personal notes are free text: they could still mention a date that
+      is not an event. Dates, citations and the event list itself can no longer be made up.
 - [ ] Model choice. Reasoning models spend the answer allowance on thinking:
       `nvidia/nemotron-3-super-120b-a12b` used 7,432 of 8,000 output tokens on it and was cut off
-      twice. Use a non-reasoning model with JSON mode. One real run (Astrostyle only) with
-      `Qwen/Qwen3-30B-A3B-Instruct-2507` gave a valid forecast of 7 events, 6 with correct
-      source-backed dates, but it also made up an event on the date of the user's own upcoming
-      event, which validation cannot catch, and it skipped the source's date ranges.
-      `Qwen/Qwen3-235B-A22B-Instruct-2507` on the same input gave 5 events, all source-backed and
-      none made up, in 9 s instead of 66 s; it also skipped the date ranges and tagged events with
-      the focus areas where the source points to another life area. `.env` still names the 30B model
+      twice. Use a non-reasoning model with JSON mode. With the earlier single-call pipeline,
+      `Qwen/Qwen3-30B-A3B-Instruct-2507` made up an event on the date of the user's own upcoming
+      event and `Qwen/Qwen3-235B-A22B-Instruct-2507` did not, in 9 s instead of 66 s; both skipped
+      the source's date ranges. `.env` still names the 30B model
+- [ ] A first forecast for a month and sign makes one call per document plus one; a web-search
+      fallback can mean up to 10 small extraction calls. Later ones reuse the extraction cache,
+      which is never pruned
 - [ ] The forecast request now sets `max_tokens` (8,000, `NEBIUS_MAX_OUTPUT_TOKENS`)
 - [ ] The server no longer checks `backendUrl` (it is a browser-only setting and is ignored)
 

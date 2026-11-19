@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
-import { Clipboard, Download } from 'lucide-react';
+import { Clipboard, Download, Star } from 'lucide-react';
 import { StoredForecast } from '../hooks/useForecast';
-import { EVENT_TYPE_LABELS, LIFE_AREA_LABELS } from '../utils/forecastShared';
+import {
+  EVENT_TYPE_LABELS,
+  LIFE_AREA_LABELS,
+  eventSkyDetails,
+} from '../utils/forecastShared';
 import {
   copyToClipboard,
   downloadIcs,
@@ -138,7 +142,9 @@ export const ForecastResults: React.FC<ForecastResultsProps> = ({
           {forecast.result.events.map((ev) => (
             <li
               key={ev.id}
-              className="p-4 rounded-xl bg-[#080B14] border border-slate-800/90"
+              className={`p-4 rounded-xl bg-[#080B14] border ${
+                ev.inFocus ? 'border-amber-400/40' : 'border-slate-800/90'
+              }`}
             >
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                 <span className="font-mono text-amber-300 font-medium">
@@ -152,6 +158,12 @@ export const ForecastResults: React.FC<ForecastResultsProps> = ({
                 >
                   {EVENT_TYPE_LABELS[ev.type]}
                 </span>
+                {ev.inFocus && (
+                  <span className="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-400/40 text-[11px] font-medium text-amber-200 flex items-center gap-1">
+                    <Star className="w-3 h-3" aria-hidden="true" />
+                    In your focus
+                  </span>
+                )}
                 {ev.lifeAreas.map((area) => (
                   <span
                     key={area}
@@ -164,6 +176,9 @@ export const ForecastResults: React.FC<ForecastResultsProps> = ({
               <h3 className="text-base font-semibold text-slate-100 mt-1.5">
                 {ev.title}
               </h3>
+              {eventSkyDetails(ev) && (
+                <p className="text-xs text-violet-200/90 mt-0.5">{eventSkyDetails(ev)}</p>
+              )}
               <p className="text-sm text-slate-300 mt-1 leading-relaxed">
                 {ev.summary}
               </p>
@@ -218,6 +233,17 @@ export const ForecastResults: React.FC<ForecastResultsProps> = ({
                   {STATUS_LABELS[source.status].label}
                 </span>
                 {source.status !== 'used' && source.reason ? ` (${source.reason})` : ''}
+                {source.status === 'used' && source.events !== undefined && (
+                  <span title="Events found in this source whose date and wording were confirmed against its text">
+                    <span className="mx-1.5" aria-hidden="true">
+                      ·
+                    </span>
+                    {source.events === 1 ? '1 event' : `${source.events} events`}
+                    {source.dropped
+                      ? `, ${source.dropped} left out (not confirmed by the source text)`
+                      : ''}
+                  </span>
+                )}
               </li>
             ))}
           </ul>

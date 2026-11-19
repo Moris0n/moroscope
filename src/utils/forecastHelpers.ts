@@ -7,6 +7,7 @@ import {
   TransitEvent,
 } from '../types/astrology';
 import {
+  LIFE_AREAS,
   MonthRange,
   formatUtcDate,
   inclusiveDaySpan,
@@ -96,6 +97,19 @@ export interface HeatmapCell {
   day: number;
   types: Set<EventType>;
   events: TransitEvent[];
+}
+
+/**
+ * The rows of the month map: the focus areas in their order, then every other life area that has
+ * an event. Without focus areas and without events, all life areas (an empty map).
+ */
+export function heatmapRows(events: TransitEvent[], focusAreas: LifeArea[]): LifeArea[] {
+  const withEvents = new Set(events.flatMap((ev) => ev.lifeAreas));
+  const rows = [
+    ...focusAreas,
+    ...LIFE_AREAS.filter((area) => withEvents.has(area) && !focusAreas.includes(area)),
+  ];
+  return rows.length > 0 ? rows : LIFE_AREAS;
 }
 
 /** One row per life area, one cell per day, each with the events tagged with that area. */

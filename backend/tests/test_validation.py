@@ -1,19 +1,19 @@
-import re
-
 import pytest
 from pydantic import ValidationError
 
-from app.forecast import validate_forecast_payload
 from app.models import (
+    ASPECTS,
     EVENT_TYPE_LABELS,
     EVENT_TYPES,
     LIFE_AREA_LABELS,
     LIFE_AREAS,
+    PLANETS,
+    TONE_EVENT_TYPES,
     error_messages,
     parse_profile,
     stored_profile,
 )
-from app.prompts import FORECAST_AGENT_PROMPT
+from app.prompts import EXTRACTOR_PROMPT, SYNTHESIZER_PROMPT
 from app.validation import (
     inclusive_day_span,
     parse_llm_json,
@@ -21,7 +21,7 @@ from app.validation import (
     primary_sign,
 )
 
-from .helpers import TAVILY_RESULTS, VALID_PROFILE, valid_event, valid_forecast
+from .helpers import VALID_PROFILE
 
 
 def test_parse_month_range_accepts_strict_month_year_and_computes_bounds():
@@ -170,124 +170,15 @@ def test_the_taxonomy_has_ten_life_areas_and_three_event_types_with_labels():
     assert EVENT_TYPES == ("keyDate", "goodTime", "caution")
     assert set(EVENT_TYPE_LABELS) == set(EVENT_TYPES)
     for area in LIFE_AREAS:
-        assert f"- {area}:" in FORECAST_AGENT_PROMPT
+        assert f"- {area}:" in EXTRACTOR_PROMPT
     for event_type in EVENT_TYPES:
-        assert f"- {event_type}:" in FORECAST_AGENT_PROMPT
-
-
-NOVEMBER = parse_month_range("November 2026")
-URLS = {r["url"] for r in TAVILY_RESULTS}
-
-
-def _forecast_errors(payload, focus_areas=None):
-    errors, result = validate_forecast_payload(
-        payload, NOVEMBER, VALID_PROFILE["focusAreas"] if focus_areas is None else focus_areas, URLS
-    )
-    assert (result is None) == bool(errors)
-    return errors
-
-
-@pytest.mark.parametrize(
-    "event",
-    [
-        valid_event(date="2025-11-05"),
-        valid_event(date="2026-11-31"),
-        valid_event(date="2026-11-10", endDate="2026-11-09"),
-        valid_event(date="2026-11-29", endDate="2026-12-02"),
-        valid_event(lifeAreas=["lottery"]),
-        valid_event(lifeAreas=["love"]),
-        valid_event(lifeAreas=["career", "career"]),
-        valid_event(lifeAreas=[]),
-        valid_event(sourceUrls=["https://fabricated.example/x"]),
-        valid_event(sourceUrls=[]),
-        valid_event(type="Doom"),
-        valid_event(type="Opportunity"),
-        valid_event(title="  "),
-        valid_event(summary="x" * 4001),
-        valid_event(personalNote="x" * 1001),
-        valid_event(personalNote=5),
-        "not an object",
-    ],
-)
-def test_validate_forecast_payload_rejects_bad_events(event):
-    assert _forecast_errors(valid_forecast(events=[event]))
-
-
-def test_validate_forecast_payload_rejects_bad_envelopes_and_ordering():
-    assert _forecast_errors([])
-    assert _forecast_errors({"theme": "t"})
-    assert _forecast_errors({"overall_theme": "t", "events": []})
-    assert _forecast_errors(valid_forecast(theme=""))
-    assert _forecast_errors(valid_forecast(events=[valid_event()] * 61))
-    out_of_order = [valid_event(date="2026-11-10"), valid_event(date="2026-11-05")]
-    assert _forecast_errors(valid_forecast(events=out_of_order))
-
-
-def test_validate_forecast_payload_returns_trimmed_events_and_a_calendar():
-    errors, result = validate_forecast_payload(
-        valid_forecast(
-            theme="  Theme  ",
-            events=[
-                valid_event(title=" Padded ", endDate="2026-11-07"),
-                valid_event(endDate=None, lifeAreas=["money", "rest"]),
-            ],
-        ),
-        NOVEMBER,
-        VALID_PROFILE["focusAreas"],
-        URLS,
-    )
-    assert errors == []
-    out = result.to_json()
-    assert out["theme"] == "Theme"
-    assert out["events"][0]["title"] == "Padded"
-    assert out["events"][0]["endDate"] == "2026-11-07"
-    assert "endDate" not in out["events"][1] and "personalNote" not in out["events"][1]
-    assert out["icsContent"].count("BEGIN:VEVENT") == 2
-    assert _forecast_errors(valid_forecast(events=[valid_event(lifeAreas=["love"])]), []) == []
-
-
-def test_personal_notes_are_kept_only_when_a_life_context_was_sent():
-    payload = valid_forecast(
-        events=[valid_event(personalNote="  Good day for your interview.  "), valid_event()]
-    )
-    _, general = validate_forecast_payload(payload, NOVEMBER, [], URLS)
-    assert [e.personal_note for e in general.events] == [None, None]
-    assert "interview" not in general.ics_content
-
-    _, personal = validate_forecast_payload(payload, NOVEMBER, [], URLS, personal_notes=True)
-    assert [e.personal_note for e in personal.events] == ["Good day for your interview.", None]
-    assert "For you: Good day for your interview." in personal.ics_content.replace("\r\n ", "")
-    blank = valid_forecast(events=[valid_event(personalNote="   ")])
-    _, result = validate_forecast_payload(blank, NOVEMBER, [], URLS, personal_notes=True)
-    assert "personalNote" not in result.to_json()["events"][0]
-
-
-def test_event_ids_are_stable_for_the_same_event_and_unique_within_a_forecast():
-    events = [
-        valid_event(),
-        valid_event(summary="Reworded by the model.", lifeAreas=["money"]),
-        valid_event(title="Another title"),
-        valid_event(date="2026-11-06"),
-    ]
-
-    def ids(payload, month=NOVEMBER):
-        errors, result = validate_forecast_payload(payload, month, [], URLS)
-        assert errors == []
-        return [e.id for e in result.events]
-
-    first = ids(valid_forecast(events=events))
-    assert first[1] == f"{first[0]}-2", (
-        "same month, dates, title and type: a suffix tells them apart"
-    )
-    assert len(set(first)) == 4
-    assert all(re.fullmatch(r"[0-9a-f]{12}(-\d+)?", i) for i in first)
-    # The id is the server's: one sent by the model is ignored, and regenerating keeps it.
-    again = ids(valid_forecast(theme="Other words", events=[valid_event(id="model-made")]))
-    assert again == first[:1]
-    december = valid_forecast(
-        events=[valid_event(date="2026-12-05", sourceUrls=["https://astro.example/nov-2026"])]
-    )
-    assert ids(december, parse_month_range("December 2026")) != first[:1]
+        assert f"{event_type}:" in SYNTHESIZER_PROMPT
+    # The Extractor reports the source's tone; code turns it into the event type.
+    assert tuple(TONE_EVENT_TYPES.values()) == ("goodTime", "caution", "keyDate")
+    for tone in TONE_EVENT_TYPES:
+        assert f'"{tone}"' in EXTRACTOR_PROMPT
+    for name in (*PLANETS, *ASPECTS):
+        assert name in EXTRACTOR_PROMPT
 
 
 def test_parse_llm_json_accepts_fenced_json_but_never_repairs():

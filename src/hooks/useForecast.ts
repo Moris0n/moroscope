@@ -6,7 +6,7 @@ import {
   connectionErrorMessage,
   requestForecast,
 } from '../api/forecastApi';
-import { primarySign } from '../utils/forecastShared';
+import { FORECAST_STEPS, primarySign } from '../utils/forecastShared';
 import {
   ForecastRecord,
   forecastForMonth,
@@ -17,7 +17,7 @@ import { STORAGE_KEYS, usePersistentState } from '../utils/storage';
 
 export type { StoredForecast };
 
-export const FORECAST_STEPS_TOTAL = 4;
+export const FORECAST_STEPS_TOTAL = FORECAST_STEPS.length;
 
 const NO_RECORDS: ForecastRecord[] = [];
 

@@ -26,7 +26,6 @@ from pydantic.alias_generators import to_camel
 
 from .validation import (
     MAX_BIRTH_YEAR,
-    MAX_EVENTS,
     MAX_EXCERPT_LENGTH,
     MAX_QUERY_LENGTH,
     MAX_SOURCE_URLS_PER_EVENT,
@@ -49,6 +48,9 @@ MAX_UPCOMING_EVENTS = 10
 MAX_EVENT_LABEL_LENGTH = 120
 MAX_PERSONAL_NOTE_LENGTH = 1000
 MAX_USER_SOURCES = 10
+MAX_ADVICE_LENGTH = 1000
+MAX_QUOTE_LENGTH = 600
+MAX_EXTRACTED_EVENTS = 60
 MAX_SOURCE_URL_LENGTH = 500
 
 ZodiacSign = Literal[
@@ -225,7 +227,7 @@ class UpcomingEvent(ApiModel):
 
 
 class LifeContext(ApiModel):
-    """The user's situation. Every answer is optional. Goes to the forecast agent, never to disk."""
+    """The user's situation. Every answer is optional. Reaches the Synthesizer as priorities, never the disk."""
 
     relationship: Annotated[Relationship | None, BeforeValidator(_blank_is_unanswered)] = None
     looking_for_partner: bool | None = None
@@ -413,36 +415,139 @@ class AgentQuery(ApiModel):
     query: _bounded(MAX_QUERY_LENGTH)  # type: ignore[valid-type]
 
 
-class AgentEvent(ApiModel):
-    """One event as the forecast agent returns it. Its id is assigned by the server."""
+Tone = Literal["favourable", "caution", "neutral"]
+TONE_EVENT_TYPES: dict[str, str] = {
+    "favourable": "goodTime",
+    "caution": "caution",
+    "neutral": "keyDate",
+}
+
+Planet = Literal[
+    "Sun",
+    "Moon",
+    "Mercury",
+    "Venus",
+    "Mars",
+    "Jupiter",
+    "Saturn",
+    "Uranus",
+    "Neptune",
+    "Pluto",
+    "Chiron",
+    "North Node",
+    "South Node",
+]
+PLANETS: tuple[str, ...] = get_args(Planet)
+Aspect = Literal[
+    "newMoon",
+    "fullMoon",
+    "solarEclipse",
+    "lunarEclipse",
+    "ingress",
+    "retrograde",
+    "direct",
+    "conjunction",
+    "opposition",
+    "square",
+    "trine",
+    "sextile",
+]
+ASPECTS: tuple[str, ...] = get_args(Aspect)
+ZODIAC: tuple[str, ...] = get_args(ZodiacSign)
+
+
+def _known_planets(value: Any) -> Any:
+    """The planets the app knows, each once; anything else is left out instead of failing."""
+    if not isinstance(value, list):
+        return None
+    names = {name.lower(): name for name in PLANETS}
+    found = [names.get(item.strip().lower()) for item in value if isinstance(item, str)]
+    return list(dict.fromkeys(name for name in found if name)) or None
+
+
+def _known(options: tuple[str, ...]) -> Any:
+    """An optional detail: a value outside `options` counts as not given."""
+    return BeforeValidator(lambda value: value if value in options else None)
+
+
+def _known_house(value: Any) -> Any:
+    return value if type(value) is int and 1 <= value <= 12 else None
+
+
+def _known_life_areas(value: Any) -> Any:
+    if not isinstance(value, list):
+        return value
+    return list(dict.fromkeys(item for item in value if item in LIFE_AREAS))
+
+
+Planets = Annotated[list[Planet] | None, BeforeValidator(_known_planets)]
+OptionalAspect = Annotated[Aspect | None, _known(ASPECTS)]
+House = Annotated[int | None, BeforeValidator(_known_house)]
+LifeAreaTags = Annotated[
+    list[LifeArea], Field(min_length=1, max_length=len(LIFE_AREAS)), AfterValidator(_unique)
+]
+PersonalNote = Annotated[str, Field(max_length=MAX_PERSONAL_NOTE_LENGTH), AfterValidator(str.strip)]
+
+
+class ExtractedEvent(ApiModel):
+    """One dated event as the Extractor found it in one document. Checked against the text."""
 
     date: IsoDate
     end_date: IsoDate | None = None  # inclusive last day
     title: _bounded(MAX_TITLE_LENGTH)  # type: ignore[valid-type]
-    type: EventType
-    life_areas: Annotated[
-        list[LifeArea], Field(min_length=1, max_length=len(LIFE_AREAS)), AfterValidator(_unique)
-    ]
+    advice: _bounded(MAX_ADVICE_LENGTH)  # type: ignore[valid-type]
+    tone: Tone
+    life_areas: Annotated[LifeAreaTags, BeforeValidator(_known_life_areas)]
+    quote: _bounded(MAX_QUOTE_LENGTH)  # type: ignore[valid-type]
+    planets: Planets = None
+    aspect: OptionalAspect = None
+    house: House = None
+    in_sign: Annotated[ZodiacSign | None, _known(ZODIAC)] = None
+
+
+class ExtractorAnswer(ApiModel):
+    """The Extractor's answer for one document. Each event is validated on its own."""
+
+    events: Annotated[list[Any], Field(max_length=MAX_EXTRACTED_EVENTS)]
+
+
+class SynthesizedGroup(ApiModel):
+    """The Synthesizer's wording for one event: one or more extracted events, named by id."""
+
+    event_ids: Annotated[list[str], Field(min_length=1, max_length=MAX_SOURCE_URLS_PER_EVENT)]
+    title: _bounded(MAX_TITLE_LENGTH)  # type: ignore[valid-type]
     summary: _bounded(MAX_SUMMARY_LENGTH)  # type: ignore[valid-type]
-    personal_note: (
-        Annotated[str, Field(max_length=MAX_PERSONAL_NOTE_LENGTH), AfterValidator(str.strip)] | None
-    ) = None
-    source_urls: Annotated[
-        list[Annotated[str, AfterValidator(_http_url)]],
-        Field(min_length=1, max_length=MAX_SOURCE_URLS_PER_EVENT),
-    ]
+    personal_note: PersonalNote | None = None
 
 
-class AgentForecast(ApiModel):
+class SynthesizerAnswer(ApiModel):
     theme: _bounded(MAX_THEME_LENGTH)  # type: ignore[valid-type]
-    events: Annotated[list[AgentEvent], Field(max_length=MAX_EVENTS)]
+    groups: list[Any]  # each one is validated on its own
 
 
 # --- responses --------------------------------------------------------------------------------
 
 
-class ForecastEvent(AgentEvent):
-    id: str  # stable for the same month, dates, title and type; unique within a forecast
+class ForecastEvent(ApiModel):
+    """One event of the forecast. Dates, type, life areas and citations come from the extracted
+    events it is built from; only the title, summary and personal note are the Synthesizer's."""
+
+    id: str  # from the source, dates and quote of the extracted event: stable across regeneration
+    date: IsoDate
+    end_date: IsoDate | None = None  # inclusive last day
+    title: _bounded(MAX_TITLE_LENGTH)  # type: ignore[valid-type]
+    type: EventType
+    life_areas: LifeAreaTags
+    summary: _bounded(MAX_SUMMARY_LENGTH)  # type: ignore[valid-type]
+    personal_note: PersonalNote | None = None
+    source_urls: Annotated[
+        list[Annotated[str, AfterValidator(_http_url)]],
+        Field(min_length=1, max_length=MAX_SOURCE_URLS_PER_EVENT),
+    ]
+    in_focus: bool = False  # touches one of the user's priorities
+    planets: list[Planet] | None = None
+    aspect: Aspect | None = None
+    house: Annotated[int, Field(ge=1, le=12)] | None = None  # counted from the reading sign
 
 
 class MonthlyForecast(ApiModel):
@@ -461,6 +566,8 @@ class SourceReport(ApiModel):
     status: Literal["used", "no_forecast", "failed"]
     reason: str | None = None
     documents: int
+    events: int | None = None  # events found in it that passed the check against its text
+    dropped: int | None = None  # events the Extractor returned that failed that check
 
 
 class Evidence(ApiModel):

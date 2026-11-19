@@ -10,7 +10,6 @@ import uvicorn
 from app.main import create_app
 
 from .helpers import (
-    CAFE_URL,
     PORT,
     UUID_PATTERN,
     VALID_PROFILE,
@@ -20,8 +19,6 @@ from .helpers import (
     parse_sse,
     profile_files,
     source_pages,
-    valid_event,
-    valid_forecast,
 )
 
 SYNTHESIZE = "/api/horoscope/synthesize"
@@ -117,18 +114,15 @@ async def test_json_response_returns_result_and_profile_id():
     assert response.status_code == 200
     data = response.json()
     assert re.match(UUID_PATTERN, data["profileId"])
-    assert len(data["result"]["events"]) == 1
+    assert len(data["result"]["events"]) == 2
     assert "BEGIN:VCALENDAR" in data["result"]["icsContent"]
-    assert upstream.services == ["nebius", "tavily", "nebius"]
+    assert upstream.services == ["query", "tavily", "extract", "extract", "synthesize"]
     assert data["evidence"] == {"mode": "web", "gap": False}
     assert [s["status"] for s in data["sources"]] == ["failed"] * 5 + ["used"]
 
 
 async def test_synthesize_reads_the_chosen_sources_and_reports_on_each():
-    upstream = Upstream(
-        pages=source_pages(),
-        nebius_outputs=[valid_forecast(events=[valid_event(sourceUrls=[CAFE_URL])])],
-    )
+    upstream = Upstream(pages=source_pages())
     general = {"mode": "general", "sunSign": "Scorpio", "targetMonth": "November 2026"}
     body = {
         "profile": general,
@@ -144,7 +138,9 @@ async def test_synthesize_reads_the_chosen_sources_and_reports_on_each():
         ("astrostyle", "used"),
         ("sally-kirkman", "used"),
     ]
-    assert upstream.services == ["nebius"]
+    assert upstream.services == ["extract"] * 3 + ["synthesize"]
+    assert [s["events"] for s in payload["sources"]] == [1, 1, 1]
+    assert all(event["inFocus"] is False for event in payload["result"]["events"])
 
 
 async def test_curated_sources_are_listed_for_the_sources_tab():
@@ -196,10 +192,10 @@ async def test_sse_stream_emits_ordered_progress_steps_then_result():
     assert response.text.startswith(": connected\n\n")
 
     events = parse_sse(response.text)
-    assert [name for name, _ in events] == ["progress"] * 4 + ["result"]
-    assert [data["step"] for name, data in events if name == "progress"] == [1, 2, 3, 4]
+    assert [name for name, _ in events] == ["progress"] * 5 + ["result"]
+    assert [data["step"] for name, data in events if name == "progress"] == [1, 2, 3, 4, 5]
     payload = events[-1][1]
-    assert len(payload["result"]["events"]) == 1
+    assert len(payload["result"]["events"]) == 2
     assert re.match(UUID_PATTERN, payload["profileId"])
 
 

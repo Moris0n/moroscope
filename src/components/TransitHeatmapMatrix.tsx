@@ -5,19 +5,19 @@ import {
 } from '../types/astrology';
 import {
   EVENT_TYPE_LABELS,
-  LIFE_AREAS,
   LIFE_AREA_LABELS,
   parseMonthRange,
 } from '../utils/forecastShared';
 import {
   buildMonthlyHeatmap,
+  heatmapRows,
   eventTypeBadgeClasses,
 } from '../utils/forecastHelpers';
 
 interface TransitHeatmapMatrixProps {
   result: ForecastResult | null;
   targetMonth: string;
-  areas: LifeArea[]; // the chosen focus areas; none means all of them
+  areas: LifeArea[]; // the chosen focus areas: the first rows, before the other areas with events
 }
 
 interface SelectedCell {
@@ -33,7 +33,7 @@ export const TransitHeatmapMatrix: React.FC<TransitHeatmapMatrixProps> = ({
   const [selected, setSelected] = useState<SelectedCell | null>(null);
 
   const range = useMemo(() => parseMonthRange(targetMonth), [targetMonth]);
-  const rows = areas.length > 0 ? areas : LIFE_AREAS;
+  const rows = useMemo(() => heatmapRows(result?.events ?? [], areas), [result, areas]);
   const matrix = useMemo(
     () =>
       range && result ? buildMonthlyHeatmap(result.events, range, rows) : null,

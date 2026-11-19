@@ -204,15 +204,42 @@
       "type": "object"
     },
     "ForecastEvent": {
+      "description": "One event of the forecast. Dates, type, life areas and citations come from the extracted\nevents it is built from; only the title, summary and personal note are the Synthesizer's.",
       "properties": {
+        "aspect": {
+          "enum": [
+            "newMoon",
+            "fullMoon",
+            "solarEclipse",
+            "lunarEclipse",
+            "ingress",
+            "retrograde",
+            "direct",
+            "conjunction",
+            "opposition",
+            "square",
+            "trine",
+            "sextile"
+          ],
+          "type": "string"
+        },
         "date": {
           "type": "string"
         },
         "endDate": {
           "type": "string"
         },
+        "house": {
+          "maximum": 12,
+          "minimum": 1,
+          "type": "integer"
+        },
         "id": {
           "type": "string"
+        },
+        "inFocus": {
+          "default": false,
+          "type": "boolean"
         },
         "lifeAreas": {
           "items": {
@@ -235,6 +262,27 @@
         "personalNote": {
           "maxLength": 1000,
           "type": "string"
+        },
+        "planets": {
+          "items": {
+            "enum": [
+              "Sun",
+              "Moon",
+              "Mercury",
+              "Venus",
+              "Mars",
+              "Jupiter",
+              "Saturn",
+              "Uranus",
+              "Neptune",
+              "Pluto",
+              "Chiron",
+              "North Node",
+              "South Node"
+            ],
+            "type": "string"
+          },
+          "type": "array"
         },
         "sourceUrls": {
           "items": {
@@ -260,13 +308,13 @@
         }
       },
       "required": [
+        "id",
         "date",
         "title",
         "type",
         "lifeAreas",
         "summary",
-        "sourceUrls",
-        "id"
+        "sourceUrls"
       ],
       "title": "ForecastEvent",
       "type": "object"
@@ -354,7 +402,7 @@
       "type": "object"
     },
     "LifeContext": {
-      "description": "The user's situation. Every answer is optional. Goes to the forecast agent, never to disk.",
+      "description": "The user's situation. Every answer is optional. Reaches the Synthesizer as priorities, never the disk.",
       "properties": {
         "caringForParents": {
           "type": "boolean"
@@ -676,6 +724,12 @@
       "description": "What happened to one source while a forecast was generated.",
       "properties": {
         "documents": {
+          "type": "integer"
+        },
+        "dropped": {
+          "type": "integer"
+        },
+        "events": {
           "type": "integer"
         },
         "id": {
