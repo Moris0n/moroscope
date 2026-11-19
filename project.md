@@ -49,7 +49,7 @@ Optional: `PORT` (default 8000), `HOST` (default 127.0.0.1), `ALLOWED_HOSTS`, `D
     customExcerpt?, sources?: {disabledCurated, user: [{id, url, active}], includeCurated}}`.
     Answer: `{result: {theme, events, icsContent}, profileId, sources: [per-source report],
     evidence: {mode, gap}}`. An event is `{id, date, endDate?, title, type, lifeAreas, summary,
-    personalNote?, sourceUrls, inFocus, planets?, aspect?, house?}`. A source report entry also has
+    personalNote?, sourceUrls, inFocus, planets?, aspect?, house?, activeWindows?}`. A source report entry also has
     `events` (verified) and `dropped` (failed the check against the source text).
 - `pipeline.py` – the steps (five progress steps):
   1. Save the profile snapshot (never the life context).
@@ -73,7 +73,13 @@ Optional: `PORT` (default 8000), `HOST` (default 127.0.0.1), `ALLOWED_HOSTS`, `D
   must be in the document (case, punctuation and spacing ignored; parts around "..." in order) and
   must name the day the event starts or ends on, in digits or spelled out (any day of a span of
   up to three days; an event spanning the whole month is exempt); a span reaching out of the month is cut to it; an end date equal to the
-  start is left out. A failed check drops that event only. The source's tone becomes the event
+  start is left out. A failed check drops that event only. A sky event has one exact day; the days the source says
+  it is felt are its active window (`activeFrom` / `activeUntil`), kept per source; its dates are not checked against the text, but a side is
+  kept only when the quote names that day or counts days before (after) the event ("the day
+  before", "3 days after"), so vague windows ("for the rest of the year") are not shown; a
+  side that lands on another event of the same document about the same matter is left out too
+  ("on the 4th and the 28th" is two events). A sky event that arrives with an end date although its quote names only the
+  first day is repaired: the end date becomes the window. The source's tone becomes the event
   type (favourable → `goodTime`, caution → `caution`, neutral → `keyDate`). Event ids are a hash
   of month, document URL, dates and quote, so they survive regeneration while the extraction is
   cached.
@@ -86,7 +92,7 @@ Optional: `PORT` (default 8000), `HOST` (default 127.0.0.1), `ALLOWED_HOSTS`, `D
 - `forecast.py` – ranking of the verified events (sets `inFocus`; when code computed the house,
   the life areas of that house are added to the event's tags), the Synthesizer's input, and the assembly: ids that do not exist
   or are used twice are skipped, of a group the largest part whose members have the same dates
-  is merged into one event and the others stay separate (citations, life areas and planets from all members; a key date when their
+  is merged into one event and the others stay separate (citations, active windows, life areas and planets from all members; a key date when their
   directions differ), events the Synthesizer left out are appended in the Extractor's words,
   the result is sorted by date, personal notes are dropped unless a life context was sent.
 - `llm.py` – the Nebius chat call (JSON mode, `max_tokens`, one retry for a cut-off or
@@ -141,7 +147,7 @@ Optional: `PORT` (default 8000), `HOST` (default 127.0.0.1), `ALLOWED_HOSTS`, `D
 - `api/sourcesApi.ts` – the curated source list. `components/SourcesManager.tsx` – switch default
   sources on and off, add / toggle / remove own sources, per-source status of the last forecast.
 - `components/` – Navigation, ProfileSummary, ForecastResults (events in focus are marked; planets,
-  aspect and house when known; verified events per source), AgentProgress (five steps),
+  aspect, house and each source's active window when known; verified events per source), AgentProgress (five steps),
   TransitHeatmapMatrix (rows: the focus areas, then the other areas that have events),
   SourcesManager, NatalProfilePanel, BirthPlaceSearch, PWAInstallButton, OfflineIndicator.
   EnergyWaveChart and ActivityScheduler are kept but not rendered (they run on synthetic data).
@@ -171,7 +177,7 @@ Optional: `PORT` (default 8000), `HOST` (default 127.0.0.1), `ALLOWED_HOSTS`, `D
   the device
 - Sun, Moon and Rising signs from a real ephemeris, checked against published charts; birth-place
   search with coordinates and timezone
-- 226 backend tests (`backend/tests/`), 27 frontend tests (`test/forecast.test.ts`)
+- 231 backend tests (`backend/tests/`), 27 frontend tests (`test/forecast.test.ts`)
 
 ### Fragile by nature
 - The site readers depend on each site's page layout, and the YouTube transcript download is
@@ -188,11 +194,13 @@ Extractor / Synthesizer pipeline) are done. Next: 3b
 (calendar grid, "Good time to…" list, event detail), then 3c (per-event and filtered `.ics`).
 Remaining items:
 
-- [ ] The two-step pipeline has not been judged on a real run yet (only with a scripted model, and
-      the quote check against the live source texts). Open after the first paid run: how often a
-      real event is dropped because the model paraphrases its quote or a transcript garbles a
-      date (the per-source `dropped` count shows it), and how well the Synthesizer groups the same
-      event across sources (a missed merge shows as two similar events).
+- [ ] Real runs of the two-step pipeline (Pisces, November 2026, `Qwen/Qwen3-235B-A22B-Instruct-2507`,
+      all five sources: 6 calls, about 45,000 tokens): 47 events returned, 44 verified, 21 forecast
+      entries; the new moon merged from 5 sources. Nothing was made up. Still open: the
+      Extractor sometimes picks a quote that does not name the day, which drops a real event (3 of
+      47); "in focus" marked 20 of 21 events for a profile with three priorities, so it says
+      little; a merged entry takes the id of its first-ranked member, so the id can change with
+      the focus areas or the sources (to settle with the month review)
 - [ ] The theme, summaries and personal notes are free text: they could still mention a date that
       is not an event. Dates, citations and the event list itself can no longer be made up.
 - [ ] Model choice. Reasoning models spend the answer allowance on thinking:
@@ -200,7 +208,7 @@ Remaining items:
       twice. Use a non-reasoning model with JSON mode. With the earlier single-call pipeline,
       `Qwen/Qwen3-30B-A3B-Instruct-2507` made up an event on the date of the user's own upcoming
       event and `Qwen/Qwen3-235B-A22B-Instruct-2507` did not, in 9 s instead of 66 s; both skipped
-      the source's date ranges. `.env` still names the 30B model
+      the source's date ranges
 - [ ] A first forecast for a month and sign makes one call per document plus one; a web-search
       fallback can mean up to 10 small extraction calls. Later ones reuse the extraction cache,
       which is never pruned

@@ -4,6 +4,7 @@ import { StoredForecast } from '../hooks/useForecast';
 import {
   EVENT_TYPE_LABELS,
   LIFE_AREA_LABELS,
+  activeWindowText,
   eventSkyDetails,
 } from '../utils/forecastShared';
 import {
@@ -179,6 +180,12 @@ export const ForecastResults: React.FC<ForecastResultsProps> = ({
               {eventSkyDetails(ev) && (
                 <p className="text-xs text-violet-200/90 mt-0.5">{eventSkyDetails(ev)}</p>
               )}
+              {ev.activeWindows?.map((window) => (
+                <p key={window.sourceUrl} className="text-xs text-slate-400 mt-0.5">
+                  Felt {activeWindowText(window, ev.date)}, according to{' '}
+                  {sourceLabel(window.sourceUrl, sources)}
+                </p>
+              ))}
               <p className="text-sm text-slate-300 mt-1 leading-relaxed">
                 {ev.summary}
               </p>

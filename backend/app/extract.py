@@ -15,7 +15,7 @@ import os
 import re
 import unicodedata
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -36,6 +36,9 @@ MIN_QUOTE_LENGTH = 12
 # In a span of up to this many days, the quote may name any of them.
 SHORT_SPAN_DAYS = 3
 
+# How a source gives a window without naming its days: "the day before", "3 days after".
+_BEFORE_RE = re.compile(r"\bdays? before\b")
+_AFTER_RE = re.compile(r"\bdays? after\b")
 _ELLIPSIS_RE = re.compile(r"\[?(?:\.{3,}|…)\]?")
 _TOKEN_RE = re.compile(r"[a-z]+|[0-9]+")
 _ORDINAL_SUFFIXES = ("st", "nd", "rd", "th")
@@ -154,6 +157,10 @@ class VerifiedEvent:
     end_date: str | None
     type: str
     event: ExtractedEvent
+    # The days the source says the event is felt, within the month. The dates themselves are not
+    # checked; a side is kept only when the quote names that day or counts days before (after).
+    active_from: str | None = None
+    active_until: str | None = None
 
 
 def extracted_event_id(
@@ -162,6 +169,14 @@ def extracted_event_id(
     """From the source, the dates and the quote: the same as long as the extraction is the same."""
     key = "|".join((month_key, url, date, end_date or "", squash(quote)))
     return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+
+
+def _quote_speaks_of(quote: str, day: str | None, words: re.Pattern[str]) -> bool:
+    """Whether the quote backs one side of an active window: it names that day, or it counts
+    days before (or after) the event ("the day before", "3 days after")."""
+    if not day:
+        return False
+    return int(day[8:]) in days_named(quote) or words.search(_plain(quote)) is not None
 
 
 def verify_event(
@@ -174,8 +189,18 @@ def verify_event(
     ends on, except for an event that spans the whole month. For a span of up to three days any
     of its days will do: sources give such a window as its middle day ("the 28th, the day before
     and the day after").
+
+    A sky event (one with an aspect) happens on one day; how long it is felt is its active
+    window, not its end date. An end date the Extractor gave it all the same becomes the end of
+    the window when the quote names the first day and not the last ("the Sun enters Sagittarius
+    on the 22nd for a monthlong visit"). A quote that names both describes a real period.
     """
     start, end = event.date, event.end_date or event.date
+    active_from, active_until = event.active_from, event.active_until
+    if event.aspect and end > start:
+        named = days_named(event.quote)
+        if int(start[8:]) in named and int(end[8:]) not in named:
+            active_until, end = active_until or end, start
     if end < start:
         return None, "the end date is before the start date"
     if start > month.last_date or end < month.first_date:
@@ -197,6 +222,21 @@ def verify_event(
         return None, "the quote does not name the day"
 
     end_date = end if end != start else None
+    if end_date:
+        active_from = active_until = None  # a period has no window around it
+    # A window lies around the date and within the month; a side that does not is left out, and
+    # so is a side the quote does not back: models fill in the end of the month by habit. This
+    # also loses true but vague windows ("for the rest of the year").
+    if not _quote_speaks_of(event.quote, active_from, _BEFORE_RE):
+        active_from = None
+    if not _quote_speaks_of(event.quote, active_until, _AFTER_RE):
+        active_until = None
+    active_from = max(active_from, month.first_date) if active_from else None
+    active_until = min(active_until, month.last_date) if active_until else None
+    if not active_from or active_from >= start:
+        active_from = None
+    if not active_until or active_until <= start:
+        active_until = None
     month_key = f"{month.year}-{month.month:02d}"
     return (
         VerifiedEvent(
@@ -207,6 +247,8 @@ def verify_event(
             end_date=end_date,
             type=TONE_EVENT_TYPES[event.tone],
             event=event,
+            active_from=active_from,
+            active_until=active_until,
         ),
         "",
     )
@@ -231,7 +273,37 @@ def verify_answer(
             dropped.append("the event was returned twice")
         else:
             verified[checked.id] = checked
-    return list(verified.values()), dropped
+    return _without_windows_onto_other_events(list(verified.values())), dropped
+
+
+def _same_matter(one: VerifiedEvent, other: VerifiedEvent) -> bool:
+    planets = set(one.event.planets or [])
+    return squash(one.event.quote) == squash(other.event.quote) or (
+        bool(planets) and planets == set(other.event.planets or [])
+    )
+
+
+def _without_windows_onto_other_events(events: list[VerifiedEvent]) -> list[VerifiedEvent]:
+    """Leave out a window side that lands on the date of another event of the same document
+    about the same matter (the same quote or the same planets): "on the 4th and the 28th" is
+    two events, not one that is felt from the 4th until the 28th."""
+
+    def lands_on_another(event: VerifiedEvent, day: str | None) -> bool:
+        return day is not None and any(
+            other.id != event.id and other.date == day and _same_matter(event, other)
+            for other in events
+        )
+
+    return [
+        replace(
+            event,
+            active_from=None if lands_on_another(event, event.active_from) else event.active_from,
+            active_until=None
+            if lands_on_another(event, event.active_until)
+            else event.active_until,
+        )
+        for event in events
+    ]
 
 
 # --- cache -------------------------------------------------------------------------------------

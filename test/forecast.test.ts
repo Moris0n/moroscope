@@ -8,6 +8,7 @@ import {
   isLegacyProfile,
   isValidBackendUrl,
   FORECAST_STEPS,
+  activeWindowText,
   eventSkyDetails,
   isValidForecastShape,
   mergeProfileWithDefaults,
@@ -202,6 +203,10 @@ test('isValidForecastShape guards the client against malformed results', () => {
     { house: 13 },
     { house: 1.5 },
     { house: '8' },
+    { activeWindows: 'Nov 6' },
+    { activeWindows: [{ start: '2026-11-06' }] },
+    { activeWindows: [{ sourceUrl: 'javascript:alert(1)' }] },
+    { activeWindows: [{ sourceUrl: 'https://a.example/', end: '2026-11-31' }] },
   ]) {
     const events = [{ ...validEvent(), ...bad }];
     assert.equal(isValidForecastShape({ theme: 't', icsContent: ics, events }), false, JSON.stringify(bad));
@@ -212,6 +217,10 @@ test('isValidForecastShape guards the client against malformed results', () => {
     planets: ['Mercury', 'Venus'],
     aspect: 'direct',
     house: 12,
+    activeWindows: [
+      { sourceUrl: 'https://a.example/', start: '2026-11-06', end: '2026-11-12' },
+      { sourceUrl: 'https://b.example/', end: '2026-11-30' },
+    ],
   });
   assert.equal(isValidForecastShape({ theme: 't', icsContent: ics, events: [detailed] }), true);
   assert.equal(eventSkyDetails(detailed), 'Mercury, Venus · turns direct · 12th house');
@@ -219,6 +228,14 @@ test('isValidForecastShape guards the client against malformed results', () => {
   assert.equal(eventSkyDetails({ house: 22 as number }), '22nd house');
   assert.equal(eventSkyDetails({ house: 3 }), '3rd house');
   assert.equal(eventSkyDetails(validEvent()), '');
+  // The days a source says an event is felt, around its date.
+  // Always a full range: a missing side is the day of the event itself.
+  assert.deepEqual(
+    detailed.activeWindows!.map((w) => activeWindowText(w, detailed.date)),
+    ['Nov 6 to Nov 12', 'Nov 5 to Nov 30']
+  );
+  assert.equal(activeWindowText({ start: '2026-11-29' }, '2026-11-30'), 'Nov 29 to Nov 30');
+  assert.equal(activeWindowText({}, '2026-11-30'), '');
   // Ids must tell the events of a forecast apart.
   assert.equal(
     isValidForecastShape({ theme: 't', icsContent: ics, events: [validEvent(), validEvent()] }),

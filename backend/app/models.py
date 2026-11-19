@@ -474,6 +474,10 @@ def _known_house(value: Any) -> Any:
     return value if type(value) is int and 1 <= value <= 12 else None
 
 
+def _known_date(value: Any) -> Any:
+    return value if parse_iso_date(value) else None
+
+
 def _known_life_areas(value: Any) -> Any:
     if not isinstance(value, list):
         return value
@@ -492,8 +496,11 @@ PersonalNote = Annotated[str, Field(max_length=MAX_PERSONAL_NOTE_LENGTH), AfterV
 class ExtractedEvent(ApiModel):
     """One dated event as the Extractor found it in one document. Checked against the text."""
 
-    date: IsoDate
-    end_date: IsoDate | None = None  # inclusive last day
+    date: IsoDate  # a sky event: the exact day; a period: its first day
+    end_date: IsoDate | None = None  # a period only: its inclusive last day
+    # A sky event only: the days the source says it is felt, around its date.
+    active_from: Annotated[str | None, BeforeValidator(_known_date)] = None
+    active_until: Annotated[str | None, BeforeValidator(_known_date)] = None
     title: _bounded(MAX_TITLE_LENGTH)  # type: ignore[valid-type]
     advice: _bounded(MAX_ADVICE_LENGTH)  # type: ignore[valid-type]
     tone: Tone
@@ -528,6 +535,15 @@ class SynthesizerAnswer(ApiModel):
 # --- responses --------------------------------------------------------------------------------
 
 
+class ActiveWindow(ApiModel):
+    """The days one source says an event is felt, around its date. The dates are not checked
+    against the text; a side is kept only when the source's quote names that day or counts days."""
+
+    source_url: Annotated[str, AfterValidator(_http_url)]
+    start: IsoDate | None = None  # first day, when it is before the event's date
+    end: IsoDate | None = None  # inclusive last day, when it is after the event's date
+
+
 class ForecastEvent(ApiModel):
     """One event of the forecast. Dates, type, life areas and citations come from the extracted
     events it is built from; only the title, summary and personal note are the Synthesizer's."""
@@ -548,6 +564,7 @@ class ForecastEvent(ApiModel):
     planets: list[Planet] | None = None
     aspect: Aspect | None = None
     house: Annotated[int, Field(ge=1, le=12)] | None = None  # counted from the reading sign
+    active_windows: list[ActiveWindow] | None = None  # per source that states one
 
 
 class MonthlyForecast(ApiModel):

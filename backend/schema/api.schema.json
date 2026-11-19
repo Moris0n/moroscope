@@ -1,5 +1,24 @@
 {
   "$defs": {
+    "ActiveWindow": {
+      "description": "The days one source says an event is felt, around its date. The dates are not checked\nagainst the text; a side is kept only when the source's quote names that day or counts days.",
+      "properties": {
+        "end": {
+          "type": "string"
+        },
+        "sourceUrl": {
+          "type": "string"
+        },
+        "start": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sourceUrl"
+      ],
+      "title": "ActiveWindow",
+      "type": "object"
+    },
     "ChartPlace": {
       "properties": {
         "lat": {
@@ -206,6 +225,12 @@
     "ForecastEvent": {
       "description": "One event of the forecast. Dates, type, life areas and citations come from the extracted\nevents it is built from; only the title, summary and personal note are the Synthesizer's.",
       "properties": {
+        "activeWindows": {
+          "items": {
+            "$ref": "#/$defs/ActiveWindow"
+          },
+          "type": "array"
+        },
         "aspect": {
           "enum": [
             "newMoon",

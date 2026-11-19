@@ -164,6 +164,145 @@ def test_a_window_of_up_to_three_days_may_be_quoted_by_any_of_its_days():
     assert dropped == ["the quote does not name the day"] * 2
 
 
+def test_a_sky_event_has_one_day_and_a_window_the_source_says_it_is_felt_in():
+    text = (
+        "9th of november active 3 days before 3 days after we have a new moon in scorpio. "
+        "The Sun starts its monthlong visit to Sagittarius on November 22. "
+        "From November 14 to 17, Jupiter and Mars will connect. "
+        "from the 9th until the 20th do not change jobs. "
+        "25th of november until february mars goes into your seventh house"
+    )
+    moon = "9th of November active 3 days before 3 days after we have a new moon"
+    sun = "The Sun starts its monthlong visit to Sagittarius on November 22"
+    trio = "From November 14 to 17, Jupiter and Mars will connect"
+    jobs = "from the 9th until the 20th do not change jobs"
+    mars = "25th of November until February Mars goes into your seventh house"
+
+    def window(**fields):
+        [event], dropped = verify(extracted_event(**fields), document=doc(text))
+        assert dropped == []
+        return event.date, event.end_date, event.active_from, event.active_until
+
+    # As asked for: the exact day, and the window in its own fields.
+    assert window(
+        date="2026-11-09", quote=moon, activeFrom="2026-11-06", activeUntil="2026-11-12"
+    ) == ("2026-11-09", None, "2026-11-06", "2026-11-12")
+    assert window(date="2026-11-09", quote=moon) == ("2026-11-09", None, None, None)
+    # A side is kept only when the quote names that day or counts days before (after) the event:
+    # models fill in the end of the month by habit. A vague "monthlong" is not enough.
+    assert window(
+        date="2026-11-22", quote=sun, activeFrom="2026-11-20", activeUntil="2026-11-30"
+    ) == ("2026-11-22", None, None, None)
+    plain = "Jupiter and Mars will connect"
+    assert window(
+        date="2026-11-14", quote=f"From November 14 to 17, {plain}", activeUntil="2026-11-30"
+    ) == ("2026-11-14", None, None, None)
+    assert window(
+        date="2026-11-14", quote=f"From November 14 to 17, {plain}", activeUntil="2026-11-17"
+    ) == ("2026-11-14", None, None, "2026-11-17")
+    # A window is cut to the month; a side that is not around the date, or no date, is left out.
+    assert window(
+        date="2026-11-09", quote=moon, activeFrom="2026-10-30", activeUntil="2026-12-21"
+    ) == ("2026-11-09", None, "2026-11-01", "2026-11-30")
+    assert window(
+        date="2026-11-09", quote=moon, activeFrom="2026-11-10", activeUntil="2026-11-09"
+    ) == ("2026-11-09", None, None, None)
+    assert window(date="2026-11-09", quote=moon, activeFrom="soon", activeUntil="2026-11-31") == (
+        "2026-11-09",
+        None,
+        None,
+        None,
+    )
+
+    # A sky event that came with an end date all the same: the quote names its first day only, so
+    # the end date was the window.
+    assert window(date="2026-11-09", endDate="2026-11-12", quote=moon, aspect="newMoon") == (
+        "2026-11-09",
+        None,
+        None,
+        "2026-11-12",
+    )
+    # ... and still one day, even where the quote does not back the window.
+    assert window(date="2026-11-22", endDate="2026-11-30", quote=sun, aspect="ingress") == (
+        "2026-11-22",
+        None,
+        None,
+        None,
+    )
+    assert window(date="2026-11-25", endDate="2027-02-01", quote=mars, aspect="ingress") == (
+        "2026-11-25",
+        None,
+        None,
+        None,
+    )
+    assert window(
+        date="2026-11-09",
+        endDate="2026-11-12",
+        quote=moon,
+        aspect="newMoon",
+        activeFrom="2026-11-06",
+        activeUntil="2026-11-11",
+    ) == ("2026-11-09", None, "2026-11-06", "2026-11-11")
+    # A quote that names both days describes a period, with or without an aspect. A period has
+    # no window.
+    assert window(date="2026-11-14", endDate="2026-11-17", quote=trio, aspect="conjunction") == (
+        "2026-11-14",
+        "2026-11-17",
+        None,
+        None,
+    )
+    assert window(date="2026-11-09", endDate="2026-11-20", quote=jobs, activeFrom="2026-11-08") == (
+        "2026-11-09",
+        "2026-11-20",
+        None,
+        None,
+    )
+
+    # The same sky event has the same id whichever way the window arrived.
+    as_window, _ = verify(
+        extracted_event(date="2026-11-09", quote=moon, activeUntil="2026-11-12"),
+        document=doc(text),
+    )
+    as_end_date, _ = verify(
+        extracted_event(date="2026-11-09", endDate="2026-11-12", quote=moon, aspect="newMoon"),
+        document=doc(text),
+    )
+    assert as_window[0].id == as_end_date[0].id
+
+
+def test_a_window_that_lands_on_another_event_about_the_same_matter_is_two_events():
+    text = (
+        "Venus in Libra aligns with your ruling planet Jupiter on the 4th & 28th. "
+        "9th of november active 3 days before 3 days after we have a new moon. "
+        "On the 12th the sun squares mars."
+    )
+    twice = "Venus in Libra aligns with your ruling planet Jupiter on the 4th & 28th"
+    moon = "9th of November active 3 days before 3 days after we have a new moon"
+    events, dropped = verify(
+        extracted_event(date="2026-11-04", quote=twice, activeUntil="2026-11-28"),
+        extracted_event(date="2026-11-28", quote=twice, activeFrom="2026-11-04"),
+        # Another matter on the day a real window ends: the window stands.
+        extracted_event(
+            date="2026-11-09",
+            quote=moon,
+            planets=["Moon"],
+            activeFrom="2026-11-06",
+            activeUntil="2026-11-12",
+        ),
+        extracted_event(
+            date="2026-11-12", quote="On the 12th the sun squares mars", planets=["Sun", "Mars"]
+        ),
+        document=doc(text),
+    )
+    assert dropped == []
+    assert [(e.date, e.active_from, e.active_until) for e in events] == [
+        ("2026-11-04", None, None),
+        ("2026-11-28", None, None),
+        ("2026-11-09", "2026-11-06", "2026-11-12"),
+        ("2026-11-12", None, None),
+    ]
+
+
 def test_transcript_quotes_are_checked_like_any_other():
     events, dropped = verify(
         extracted_event(

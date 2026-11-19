@@ -49,6 +49,8 @@
   the document and names the day. The Synthesizer gets the verified events (never source text or
   quotes) and only words them: dates, types, life areas, houses, citations and ids are set in code.
   Keep it that way: no rule that a model could break may be enforced only by a prompt.
+  The one thing shown whose dates are not checked against the text is a sky event's active window
+  (the days a source says it is felt; a side is kept only when the quote names that day or counts days before or after); events merge on their exact day, never on the window.
 - Extractor answers are cached under `DATA_DIR/cache/extractions/`, keyed by the document text,
   sign, month, model and the prompt text, so editing `EXTRACTOR_PROMPT` or the model makes every
   document cost a call again. The cache holds the unchecked answers; the checks run on every read.

@@ -189,7 +189,7 @@ Login, server-side encrypted profiles, multi-device sync, forecast history.
 **Forecast pipeline** (as built)
 1. Validate the profile (including life context) and the source configuration; save the profile snapshot without the life context.
 2. Read the sources using the F2 rules. Only in the web-search fallback: a query agent writes one search query (sign, month and year, focus areas; no personal data) for Tavily.
-3. Extractor: one LLM call per source document, with the month, the sign and that document. Nothing about the user, so the answer is cached. It returns dated events, each with a verbatim quote, the source's tone, life areas and, when the source says so, planets, aspect, house and sign.
+3. Extractor: one LLM call per source document, with the month, the sign and that document. Nothing about the user, so the answer is cached. It returns dated events (a sky event with its exact day and, separately, the days the source says it is felt; a period with a first and a last day), each with a verbatim quote, the source's tone, life areas and, when the source says so, planets, aspect, house and sign.
 4. Verification in code, per event: the quote is in the document and names the day; the dates lie within the month. A failed check drops that event and is counted per source.
 5. Priorities in code: the house table, life context → life areas and houses, ranking (hand-picked focus areas, then derived ones, then the rest; never a filter) and a templated narrative that says only what the user stated.
 6. Synthesizer: one LLM call with the verified events (no source text), the narrative and the user's dated plans. It refers to events by id and writes the theme and, per event, a title, a summary and a personal note. It can group events from several sources.
@@ -217,7 +217,7 @@ Login, server-side encrypted profiles, multi-device sync, forecast history.
   - `lifeContext`: `{ relationship, lookingForPartner, work, kids, family, moneyFocus, healthFocus, goals, upcomingEvents[] }`
   - `focusAreas`: `LifeArea[]`
 - **Source**: `id`, `name`, `domain` / `url`, `type`, `language`, `origin` (`'curated' | 'user'`), `active`
-- **ForecastEvent**: `id`, `date`, `endDate?`, `title`, `type`, `lifeAreas[]`, `summary`, `personalNote?`, `sourceUrls[]`, `inFocus`, `planets?`, `aspect?`, `house?` (as built in Phase 3a)
+- **ForecastEvent**: `id`, `date`, `endDate?`, `title`, `type`, `lifeAreas[]`, `summary`, `personalNote?`, `sourceUrls[]`, `inFocus`, `planets?`, `aspect?`, `house?`, `activeWindows?[]` (as built in Phase 3a)
 - **MonthlyForecast**: `theme`, `events[]`, `icsContent` now; `keyDates[]` and `evidenceNote` come with the month overview (3b)
 - **Stored forecast record** (device): `version`, `month`, `forecast` (`result`, `generatedAt`, `sign`, `mode`, `focusAreas`, source report, evidence); a `review` is added later
 
@@ -257,7 +257,7 @@ Notes from the port: validation was hand-written (a 1:1 port of the TypeScript c
 - Personal notes (only when a life context was sent), stable server-assigned event ids.
 - The latest forecast per month kept on the device.
 - Two-step forecast: a per-source Extractor whose events are verified against the source text in code, priorities and ranking in code, and a Synthesizer that refers to events by id (done).
-- Open: the two-step pipeline has not been judged on a real run yet.
+- Judged on real runs with all five sources; the open points are listed in `project.md`.
 
 **3b: views**
 - Month overview (theme, top key dates, evidence note), calendar grid, "Good time to…" list, event detail.

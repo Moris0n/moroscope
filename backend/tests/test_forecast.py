@@ -9,7 +9,7 @@ from .helpers import extracted_event
 NOVEMBER = parse_month_range("November 2026")
 MONTH = {"firstDate": "2026-11-01", "lastDate": "2026-11-30", "label": "November 2026"}
 TEXT = (
-    "New moon in Scorpio on November 9. Mercury turns direct on November 13. "
+    "New moon in Scorpio on November 9, felt the day before and 3 days after. Mercury turns direct on November 13. "
     "Be careful with money on November 13. Full moon in Gemini on November 24. "
     "Venus enters Libra on November 3, in your twelfth house."
 )
@@ -31,7 +31,7 @@ def new_moon(**fields):
             advice="A fresh start.",
             tone="neutral",
             lifeAreas=["health"],
-            quote="New moon in Scorpio on November 9",
+            quote="New moon in Scorpio on November 9, felt the day before and 3 days after",
             planets=["Moon"],
             aspect="newMoon",
             inSign="Scorpio",
@@ -224,7 +224,8 @@ def test_of_a_group_with_differing_dates_the_largest_part_with_the_same_dates_is
     document_c = "https://c.example/nov"
     spans = [
         *events_of(A, new_moon()),
-        *events_of(B, new_moon(endDate="2026-11-12")),
+        # Reported as a period (no aspect), so its end date stands.
+        *events_of(B, new_moon(endDate="2026-11-12", aspect=None)),
         *events_of(document_c, new_moon(), full_moon()),
     ]
     events = rank_events(spans, build_priorities([], {}), "Scorpio")
@@ -245,6 +246,46 @@ def test_of_a_group_with_differing_dates_the_largest_part_with_the_same_dates_is
     again = assemble(answer, events)["events"]
     assert sorted(e["title"] for e in again) == ["Full moon in Gemini", "Merged", "Second"]
     assert next(e for e in again if e["title"] == "Second")["endDate"] == "2026-11-12"
+
+
+def test_a_merged_event_keeps_the_window_each_source_gives():
+    document_c = "https://c.example/nov"
+    events = rank_events(
+        [
+            *events_of(A, new_moon()),
+            *events_of(B, new_moon(activeFrom="2026-11-06", activeUntil="2026-11-12")),
+            # An end date on a sky event whose quote names only its day: a window, so it merges.
+            *events_of(document_c, new_moon(endDate="2026-11-10")),
+        ],
+        build_priorities([], {}),
+        "Scorpio",
+    )
+    payload = synthesizer_payload(MONTH, "Scorpio", build_priorities([], {}), [], events)
+    assert sorted(
+        (e["source"], e.get("endDate"), e.get("activeFrom"), e.get("activeUntil"))
+        for e in payload["events"]
+    ) == [
+        ("a.example", None, None, None),
+        ("b.example", None, "2026-11-06", "2026-11-12"),
+        ("c.example", None, None, "2026-11-10"),
+    ]
+    answer = {
+        "theme": "t",
+        "groups": [{"eventIds": [e.id for e in events], "title": "Merged", "summary": "s"}],
+    }
+    [event] = assemble(answer, events)["events"]
+    assert (event["date"], event.get("endDate")) == ("2026-11-09", None)
+    assert sorted(event["sourceUrls"]) == [A, B, document_c]
+    assert sorted(event["activeWindows"], key=lambda w: w["sourceUrl"]) == [
+        {"sourceUrl": B, "start": "2026-11-06", "end": "2026-11-12"},
+        {"sourceUrl": document_c, "end": "2026-11-10"},
+    ]
+    # Without a window, the field is absent.
+    [plain] = assemble(
+        {"theme": "t", "groups": []},
+        events[:0] + rank_events(events_of(A, new_moon()), build_priorities([], {}), "Scorpio"),
+    )["events"]
+    assert "activeWindows" not in plain
 
 
 def test_ids_that_do_not_exist_or_are_used_twice_are_skipped_and_nothing_is_lost():

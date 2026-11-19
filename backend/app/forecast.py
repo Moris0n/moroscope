@@ -16,6 +16,7 @@ from .extract import VerifiedEvent
 from .ics import build_ics_calendar
 from .models import (
     MAX_SOURCE_URLS_PER_EVENT,
+    ActiveWindow,
     ForecastEvent,
     MonthlyForecast,
     SynthesizedGroup,
@@ -95,6 +96,8 @@ def synthesizer_payload(
             "planets": event.planets,
             "aspect": event.aspect,
             "house": ranked.house,
+            "activeFrom": verified.active_from,
+            "activeUntil": verified.active_until,
         }
         listed.append({key: value for key, value in entry.items() if value is not None})
     payload: dict[str, Any] = {
@@ -127,6 +130,16 @@ def _event(
     come from outside; everything else is built from the members."""
     first = members[0]
     planets = list(dict.fromkeys(p for m in members for p in m.verified.event.planets or []))
+    # One window per source that states one; a source's first is kept.
+    windows: dict[str, ActiveWindow] = {}
+    for verified in (m.verified for m in members):
+        if verified.active_from or verified.active_until:
+            windows.setdefault(
+                verified.url,
+                ActiveWindow(
+                    source_url=verified.url, start=verified.active_from, end=verified.active_until
+                ),
+            )
     return ForecastEvent(
         id=first.id,
         date=first.verified.date,
@@ -143,6 +156,7 @@ def _event(
         planets=planets or None,
         aspect=_first(m.verified.event.aspect for m in members),
         house=_first(m.house for m in members),
+        active_windows=list(windows.values())[:MAX_SOURCE_URLS_PER_EVENT] or None,
     )
 
 

@@ -72,6 +72,23 @@ export const FORECAST_STEPS: { step: number; label: string }[] = [
 const ordinal = (n: number) =>
   `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
 
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const shortDate = (iso: string) => `${SHORT_MONTHS[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}`;
+
+/**
+ * The days a source says an event is felt, as a full range: "Nov 6 to Nov 12". A window with
+ * one side only starts or ends on the day of the event itself (`eventDate`): the other side was
+ * not stated, or lies outside the month. "" when the window has neither side.
+ */
+export function activeWindowText(
+  window: { start?: string; end?: string },
+  eventDate: string
+): string {
+  if (!window.start && !window.end) return '';
+  return `${shortDate(window.start ?? eventDate)} to ${shortDate(window.end ?? eventDate)}`;
+}
+
 /** The sky details of an event in words ("Mercury, Venus · turns direct · 12th house"), or "". */
 export function eventSkyDetails(
   event: Pick<ForecastEvent, 'planets' | 'aspect' | 'house'>
@@ -332,6 +349,16 @@ export function isValidBirthTime(value: unknown): boolean {
   return h >= 0 && h <= 23 && m >= 0 && m <= 59;
 }
 
+function isActiveWindow(input: unknown): boolean {
+  if (!input || typeof input !== 'object') return false;
+  const w = input as Record<string, unknown>;
+  return (
+    isHttpUrl(w.sourceUrl) &&
+    (w.start === undefined || !!parseIsoDate(w.start)) &&
+    (w.end === undefined || !!parseIsoDate(w.end))
+  );
+}
+
 export function isValidForecastShape(input: unknown): input is ForecastResult {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
   const obj = input as Record<string, unknown>;
@@ -368,6 +395,8 @@ export function isValidForecastShape(input: unknown): input is ForecastResult {
       e.house !== undefined &&
       !(Number.isInteger(e.house) && (e.house as number) >= 1 && (e.house as number) <= 12)
     )
+      return false;
+    if (e.activeWindows !== undefined && !(Array.isArray(e.activeWindows) && e.activeWindows.every(isActiveWindow)))
       return false;
   }
   return true;

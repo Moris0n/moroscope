@@ -7,6 +7,18 @@ export interface MoroscopeApi {
   [k: string]: unknown;
 }
 /**
+ * The days one source says an event is felt, around its date. The dates are not checked
+ * against the text; a side is kept only when the source's quote names that day or counts days.
+ *
+ * This interface was referenced by `MoroscopeApi`'s JSON-Schema
+ * via the `definition` "ActiveWindow".
+ */
+export interface ActiveWindow {
+  end?: string;
+  sourceUrl: string;
+  start?: string;
+}
+/**
  * This interface was referenced by `MoroscopeApi`'s JSON-Schema
  * via the `definition` "ChartPlace".
  */
@@ -115,6 +127,7 @@ export interface Evidence {
  * via the `definition` "ForecastEvent".
  */
 export interface ForecastEvent {
+  activeWindows?: ActiveWindow[];
   aspect?:
     | 'newMoon'
     | 'fullMoon'
